@@ -158,14 +158,27 @@ Each benchmark run produces a JSON array of result objects:
 
 ## Sample Algorithm Comparison
 
-Results from a POCO F3 (SM8250/Kona) baseline run:
+Results from a POCO F3 (SM8250/Kona, 8GB RAM) baseline run with 6 data patterns:
 
-| Algorithm | Avg Write (MB/s) | Avg Read (MB/s) | Avg Ratio | Avg Latency (us) | Mem Overhead (KB) |
-|-----------|------------------|-----------------|-----------|-------------------|-------------------|
-| lz4 | 295.3 | 438.5 | 32.14:1 | 8.2 | 128.4 |
-| lzo | 281.7 | 412.3 | 31.87:1 | 9.1 | 135.2 |
+| Algorithm | Avg Write (MB/s) | Avg Read (MB/s) | Avg Ratio | Best For |
+|-----------|------------------|-----------------|-----------|----------|
+| **lzo-rle** | **291.3** | 420.5 | 1121.92:1 | Best throughput |
+| lz4 | 285.7 | 444.1 | 1215.28:1 | Balanced performance |
+| lzo | 286.5 | 426.8 | 1087.13:1 | Legacy compatibility |
+| **zstd** | 273.7 | **436.0** | **1508.22:1** | Best compression |
 
-*Results vary by device, kernel version, and workload pattern.*
+### Compression by Data Pattern
+
+| Pattern | lz4 | lzo-rle | zstd | Description |
+|---------|-----|---------|------|-------------|
+| zeros | inf | inf | inf | All-zero data (kernel optimization) |
+| compressible | inf | inf | inf | Repeating 'A' pattern |
+| random | 1.00:1 | 1.00:1 | 1.00:1 | Uncompressible data |
+| **text** | **7281:1** | **6721:1** | **9039:1** | Repeating sentences |
+| structured | 5.56:1 | 5.56:1 | 5.56:1 | App data mix (70% structured) |
+| mixed | 3.32:1 | 3.32:1 | 3.32:1 | Realistic workload (40/30/30) |
+
+*Results vary by device, kernel version, and workload pattern. Zstd achieves 25% better compression than lz4 on text data.*
 
 ## Algorithm Notes
 
