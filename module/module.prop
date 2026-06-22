@@ -1,0 +1,7 @@
+id=zram_bench
+name=ZRAM Benchmark
+author=raz123
+description=Enhanced ZRAM benchmark tool with WebUI dashboard
+version=1.0
+versionCode=1
+supported_ksu=true

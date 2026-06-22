@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZRAM Benchmark</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-row">
+                <h1>ZRAM Benchmark</h1>
+                <span class="version" id="version"></span>
+            </div>
+            <div class="device-info" id="device-info">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Model</span>
+                        <span class="info-value" id="device-model">--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Kernel</span>
+                        <span class="info-value" id="device-kernel">--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">ZRAM Algorithm</span>
+                        <span class="info-value" id="device-algo">--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">ZRAM Size</span>
+                        <span class="info-value" id="device-disksize">--</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="controls">
+                <div class="button-row">
+                    <button id="btn-quick" class="btn btn-primary">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/>
+                        </svg>
+                        Quick Test
+                    </button>
+                    <button id="btn-full" class="btn btn-secondary">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12,6 12,12 16,14"/>
+                        </svg>
+                        Full Benchmark
+                    </button>
+                </div>
+                <div class="button-row export-row" id="export-row" style="display:none;">
+                    <button id="btn-export-json" class="btn btn-export">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21,15v4a2,2,0,0,1-2,2H5a2,2,0,0,1-2-2V15"/>
+                            <polyline points="7,10 12,15 17,10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export JSON
+                    </button>
+                    <button id="btn-export-csv" class="btn btn-export">
+                        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21,15v4a2,2,0,0,1-2,2H5a2,2,0,0,1-2-2V15"/>
+                            <polyline points="7,10 12,15 17,10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </section>
+
+            <section class="progress" id="progress-section" style="display:none;">
+                <div class="progress-header">
+                    <span id="progress-phase">Initializing...</span>
+                    <span id="progress-pct">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-detail" id="progress-detail"></div>
+            </section>
+
+            <section class="results" id="results-section" style="display:none;">
+                <h2>Latest Results</h2>
+                <div class="results-summary" id="results-summary"></div>
+                <div class="results-table-wrap">
+                    <table class="results-table" id="results-table">
+                        <thead>
+                            <tr>
+                                <th>Algorithm</th>
+                                <th>Mode</th>
+                                <th>Streams</th>
+                                <th>Write MB/s</th>
+                                <th>Read MB/s</th>
+                                <th>Ratio</th>
+                                <th>Latency &mu;s</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="history">
+                <div class="history-header">
+                    <h2>History</h2>
+                    <button id="btn-clear-history" class="btn btn-text" style="display:none;">Clear</button>
+                </div>
+                <div id="history-container" class="history-list">
+                    <p class="empty-state">No history yet. Run a benchmark to get started.</p>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

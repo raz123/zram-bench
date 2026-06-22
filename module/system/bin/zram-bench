@@ -1,0 +1,68 @@
+#!/system/bin/sh
+# zram-bench — CLI wrapper for ZRAM Benchmark
+# Installed to /system/bin/zram-bench by KernelSU module.
+# Delegates to the benchmark script in /data/adb/modules/zram_bench/.
+
+BENCH_SCRIPT="/data/adb/modules/zram_bench/zram_bench.sh"
+
+usage() {
+    cat << 'EOF'
+ZRAM Benchmark CLI
+
+Usage: zram-bench [options]
+
+Options:
+  --quick    Quick test: lz4+zstd, 3 patterns, 2 streams, 1 iter, 16 MB
+  --full     Full benchmark: all 6 patterns, 2 streams, 3 iters, 32 MB,
+             results saved to /sdcard/zram_results.json
+  --help     Show this help
+  -h         Show this help
+
+For advanced options (algorithms, modes, streams, iterations, etc.)
+pass them directly:
+  zram-bench -a "lz4 zstd" -m "zeros random" -n 5 -d 128
+
+Run 'zram_bench.sh --help' for the full option list.
+EOF
+}
+
+# ── Help / no-args ────────────────────────────────────────────
+case "${1:-}" in
+    --help|-h|"")
+        usage
+        exit 0
+        ;;
+esac
+
+# ── Verify benchmark script exists ────────────────────────────
+if [ ! -f "$BENCH_SCRIPT" ]; then
+    echo "Error: Benchmark script not found at $BENCH_SCRIPT" >&2
+    echo "Install the ZRAM Benchmark module first." >&2
+    exit 1
+fi
+
+# Ensure executable (some SELinux contexts strip x-bit)
+[ -x "$BENCH_SCRIPT" ] || chmod 755 "$BENCH_SCRIPT" 2>/dev/null
+
+# ── Dispatch ──────────────────────────────────────────────────
+case "$1" in
+    --quick)
+        exec "$BENCH_SCRIPT" \
+            -a "lz4 zstd" \
+            -m "zeros random text" \
+            -s 2 -n 1 -d 16 \
+            --skip-latency --skip-cpu
+        ;;
+    --full)
+        exec "$BENCH_SCRIPT" \
+            -a "lz4 zstd" \
+            -m "zeros compressible random text structured mixed" \
+            -s 2 -n 3 -d 32 \
+            --skip-latency --skip-cpu \
+            -o /sdcard/zram_results.json
+        ;;
+    *)
+        # Pass through all arguments to the benchmark script
+        exec "$BENCH_SCRIPT" "$@"
+        ;;
+esac
