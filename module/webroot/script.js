@@ -1,3 +1,5 @@
+console.log('[zram-bench] script loaded');
+
 // Sanitize HTML to prevent XSS
 function sanitize(str) {
     if (typeof str !== 'string') return '';
@@ -19,8 +21,13 @@ const state = {
     activeHistoryIdx: null,
 };
 
-const BENCH_BIN = '/system/bin/zram-bench';
-const RESULTS_PATH = '/data/local/tmp/zram-bench/.results/final.json';
+const BENCH_BIN_CANDIDATES = [
+    '/system/bin/zram-bench',
+    '/data/adb/modules/zram_bench/zram-bench',
+    '/data/adb/modules/zram_bench/system/bin/zram-bench',
+];
+let BENCH_BIN = BENCH_BIN_CANDIDATES[0]; // resolved at init
+const RESULTS_PATH = '/data/local/tmp/zram_bench/.results/final.json';
 const HISTORY_KEY = 'zram-bench_history';
 const MAX_HISTORY = 20;
 
@@ -52,23 +59,40 @@ const dom = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────
-function shell(cmd, timeoutMs = 30000) {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            reject(new Error('Command timed out after ' + (timeoutMs/1000) + 's'));
-        }, timeoutMs);
-        
-        if (typeof ksu !== 'undefined' && ksu.exec) {
-            ksu.exec(cmd, (result) => {
-                clearTimeout(timer);
-                resolve(result);
-            });
-        } else {
-            clearTimeout(timer);
-            console.warn('[mock] ksu.exec not available');
-            reject(new Error('ksu.exec not available — root access required'));
-        }
-    });
+async function shell(cmd, timeoutMs = 30000) {
+    console.log('[zram-bench] shell():', cmd.substring(0, 80));
+    if (typeof ksu === 'undefined' || typeof ksu.exec !== 'function') {
+        console.error('[zram-bench] ksu.exec NOT available');
+        throw new Error('ksu.exec not available — root access required');
+    }
+    
+    return Promise.race([
+        // Try Promise-based API first (KernelSU standard)
+        (async () => {
+            try {
+                const result = await ksu.exec(cmd);
+                console.log('[zram-bench] ksu.exec result type:', typeof result);
+                if (typeof result === 'object' && result !== null) {
+                    return result.stdout || JSON.stringify(result);
+                }
+                return String(result);
+            } catch (e) {
+                console.log('[zram-bench] Promise-based failed, trying callback:', e.message);
+                // Promise-based failed, try callback-based
+                return new Promise((resolve, reject) => {
+                    try {
+                        ksu.exec(cmd, (result) => resolve(result));
+                    } catch (e2) {
+                        reject(new Error('ksu.exec failed: ' + e2.message));
+                    }
+                });
+            }
+        })(),
+        // Timeout
+        new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Command timed out after ' + (timeoutMs/1000) + 's')), timeoutMs);
+        })
+    ]);
 }
 
 function shellLines(cmd) {
@@ -283,6 +307,7 @@ async function estimateTotalTests(mode) {
 }
 
 async function runBenchmark(mode) {
+    console.log('[zram-bench] runBenchmark() START, mode:', mode);
     if (state.running) return;
     state.running = true;
 
@@ -295,7 +320,7 @@ async function runBenchmark(mode) {
 
     // Update progress every N seconds by polling the test count
     const args = getBenchArgs(mode);
-    const cmd = BENCH_BIN + ' ' + args + ' -o ' + RESULTS_PATH + ' -v';
+    const cmd = BENCH_BIN + ' ' + args + ' -o ' + RESULTS_PATH;
 
     updateProgress(0, 'Running benchmark...', 'Mode: ' + mode);
 
@@ -303,7 +328,7 @@ async function runBenchmark(mode) {
     const progressTimer = setInterval(async () => {
         try {
             const countRaw = await shell(
-                'ls /data/local/tmp/zram-bench/.results/*.json 2>/dev/null | wc -l'
+                'ls /data/local/tmp/zram_bench/.results/*.json 2>/dev/null | wc -l'
             );
             currentTest = parseInt(countRaw, 10) || 0;
             const pct = Math.min((currentTest / totalTests) * 100, 99);
@@ -631,10 +656,57 @@ function downloadFile(content, filename, mime) {
 }
 
 // ── Init ───────────────────────────────────────────────────────
-function init() {
-    loadDeviceInfo();
-    loadHistory();
+async function init() {
+    console.log('[zram-bench] init() START');
+    // Debug: show API surface
+    const debugEl = document.getElementById('debug-output');
+    console.log('[zram-bench] debugEl:', debugEl ? 'found' : 'NOT FOUND');
+    if (debugEl) {
+        const info = [];
+        info.push('typeof ksu: ' + typeof ksu);
+        info.push('typeof window.ksu: ' + typeof window.ksu);
+        info.push('typeof kernelsu: ' + typeof kernelsu);
+        info.push('typeof window.KSU: ' + typeof window.KSU);
+        if (typeof ksu === 'object' && ksu) {
+            info.push('ksu keys: ' + Object.keys(ksu).join(', '));
+        }
+        if (typeof window.ksu === 'object' && window.ksu) {
+            info.push('window.ksu keys: ' + Object.keys(window.ksu).join(', '));
+        }
+        // Check for common KernelSU API variations
+        info.push('navigator.userAgent: ' + navigator.userAgent.substring(0, 80));
+        debugEl.textContent = info.join('\n');
+    }
+    console.log('[zram-bench] debug section populated');
+    
+    // Resolve bench binary path
+    console.log('[zram-bench] resolving bench binary...');
+    for (const candidate of BENCH_BIN_CANDIDATES) {
+        try {
+            console.log('[zram-bench] trying:', candidate);
+            const exists = await shell('test -x ' + candidate + ' && echo 1');
+            console.log('[zram-bench] result:', exists);
+            if (exists.trim() === '1') {
+                BENCH_BIN = candidate;
+                console.log('[zram-bench] FOUND:', candidate);
+                break;
+            }
+        } catch (e) {
+            console.log('[zram-bench] candidate failed:', candidate, e.message);
+        }
+    }
+    console.log('[zram-bench] BENCH_BIN:', BENCH_BIN);
+    
+    try {
+        console.log('[zram-bench] loadDeviceInfo()...');
+        await loadDeviceInfo();
+        console.log('[zram-bench] loadDeviceInfo() done');
+    } catch (e) {
+        console.error('[zram-bench] loadDeviceInfo FAILED:', e);
+        if (debugEl) debugEl.textContent += '\nloadDeviceInfo error: ' + e.message;
+    }
 
+    console.log('[zram-bench] attaching event listeners...');
     dom.btnQuick.addEventListener('click', () => runBenchmark('quick'));
     dom.btnFull.addEventListener('click', () => runBenchmark('full'));
     dom.btnExportJson.addEventListener('click', exportJSON);
@@ -642,6 +714,10 @@ function init() {
     dom.btnClearHistory.addEventListener('click', () => {
         if (confirm('Clear all benchmark history?')) clearHistory();
     });
+    if (debugEl) {
+        debugEl.textContent += '\ninit() complete. BENCH_BIN=' + BENCH_BIN;
+    }
+    console.log('[zram-bench] init() COMPLETE');
 }
 
 document.addEventListener('DOMContentLoaded', init);
