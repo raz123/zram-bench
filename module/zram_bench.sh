@@ -204,8 +204,9 @@ check_prereqs() {
 
 # Set up zram with specified disksize (bytes). Called before each measurement.
 setup_zram() {
-    # Disable swap if active (may fail if swap is busy)
-    swapoff "$DEV_ZRAM" 2>/dev/null || true
+    # Disable swap if active (may fail or hang if swap is busy)
+    # Use timeout to prevent indefinite hang when system actively swaps
+    timeout 5 swapoff "$DEV_ZRAM" 2>/dev/null || true
 
     # Drop caches to reduce noise
     echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
