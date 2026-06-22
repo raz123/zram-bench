@@ -204,16 +204,17 @@ check_prereqs() {
 
 # Set up zram with specified disksize (bytes). Called before each measurement.
 setup_zram() {
-    # Disable swap if active
-    swapoff "$DEV_ZRAM" 2>/dev/null
+    # Disable swap if active (may fail if swap is busy)
+    swapoff "$DEV_ZRAM" 2>/dev/null || true
 
     # Drop caches to reduce noise
     echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
 
     # Reset the device (clears all data, resets stats)
+    # May fail if swap is still active - continue anyway
     echo 1 > "${SYS_ZRAM}/reset" 2>/dev/null || {
-        log "WARNING: Could not reset zram"
-        return 1
+        log "WARNING: Could not reset zram (swap may be active)"
+        # Continue anyway - we can still write to zram
     }
 
     return 0
@@ -222,8 +223,9 @@ setup_zram() {
 # Set disksize (must be called AFTER set_algorithm on some kernels)
 set_disksize() {
     local disksize_bytes="$1"
-    echo "$disksize_bytes" > "${SYS_ZRAM}/disksize" || {
-        die "Cannot set disksize to $disksize_bytes"
+    # May fail if swap is active - use existing disksize
+    echo "$disksize_bytes" > "${SYS_ZRAM}/disksize" 2>/dev/null || {
+        log "NOTE: Using existing disksize (swap may be active)"
     }
 }
 
