@@ -2,7 +2,12 @@ const DEBUG = false;
 if (DEBUG) console.log('[zram-bench] script loaded');
 
 window.onerror = function(msg, url, line, col, error) {
-    document.body.innerHTML = '<div style="padding:20px;color:#f44;font-family:monospace"><h2>JavaScript Error</h2><p>' + msg + '</p><p>Line: ' + line + '</p></div>';
+    document.body.innerHTML = '<div style="padding:20px;color:#f44;font-family:monospace"><h2>JavaScript Error</h2><p>' + sanitize(msg) + '</p><p>Line: ' + line + '</p></div>';
+    return false;
+};
+
+window.onunhandledrejection = function(e) {
+    window.onerror(e.reason?.message || String(e.reason), '', 0, 0, e.reason);
     return false;
 };
 

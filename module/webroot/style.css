@@ -621,14 +621,27 @@ h2 {
 }
 
 .collapsible-content {
-    max-height: 0;
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.3s ease;
     overflow: hidden;
-    transition: max-height 0.3s ease, opacity 0.25s ease;
-    opacity: 0;
 }
 
 .collapsible-content.expanded {
-    max-height: 400px;
-    opacity: 1;
-    padding-top: 10px;
+    grid-template-rows: 1fr;
+}
+
+.collapsible-content > div {
+    overflow: hidden;
+    min-height: 0;
+}
+
+.collapsible-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .collapsible-content { transition: none; }
+    .collapsible-toggle .chevron { transition: none; }
 }
