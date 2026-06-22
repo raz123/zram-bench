@@ -30,6 +30,11 @@ RESULTS_FILE=""
 RESULTS_DIR=""
 RESULT_COUNT=0
 
+# Original zram settings (restored on exit)
+ORIG_ALGORITHM=""
+ORIG_DISKSIZE=""
+ORIG_STREAMS=""
+
 # ─── Utility ─────────────────────────────────────────────────────
 
 log() {
@@ -122,15 +127,49 @@ parse_args() {
     done
 }
 
+# ─── Snapshot & Restore ─────────────────────────────────────────
+
+# Snapshot original zram settings before modifying
+snapshot_zram_settings() {
+    ORIG_ALGORITHM=$(cat "${SYS_ZRAM}/comp_algorithm" 2>/dev/null | grep -o '\[.*\]' | tr -d '[]')
+    ORIG_DISKSIZE=$(cat "${SYS_ZRAM}/disksize" 2>/dev/null || echo 0)
+    ORIG_STREAMS=$(cat "${SYS_ZRAM}/max_comp_streams" 2>/dev/null || echo 8)
+    [ "$VERBOSE" -eq 1 ] && log "  [snapshot] algo=$ORIG_ALGORITHM disksize=$ORIG_DISKSIZE streams=$ORIG_STREAMS"
+}
+
+# Restore original zram settings on exit
+restore_zram_settings() {
+    [ "$VERBOSE" -eq 1 ] && log "  [restore] Restoring original zram settings..."
+    
+    # Reset device first
+    if [ -w "${SYS_ZRAM}/reset" ]; then
+        echo 1 > "${SYS_ZRAM}/reset" 2>/dev/null
+        sleep 1
+    fi
+    
+    # Restore algorithm (must be before disksize!)
+    if [ -n "$ORIG_ALGORITHM" ] && [ -w "${SYS_ZRAM}/comp_algorithm" ]; then
+        echo "$ORIG_ALGORITHM" > "${SYS_ZRAM}/comp_algorithm" 2>/dev/null
+    fi
+    
+    # Restore disksize
+    if [ -n "$ORIG_DISKSIZE" ] && [ "$ORIG_DISKSIZE" -gt 0 ] 2>/dev/null && [ -w "${SYS_ZRAM}/disksize" ]; then
+        echo "$ORIG_DISKSIZE" > "${SYS_ZRAM}/disksize" 2>/dev/null
+    fi
+    
+    # Restore streams
+    if [ -n "$ORIG_STREAMS" ] && [ -w "${SYS_ZRAM}/max_comp_streams" ]; then
+        echo "$ORIG_STREAMS" > "${SYS_ZRAM}/max_comp_streams" 2>/dev/null
+    fi
+    
+    [ "$VERBOSE" -eq 1 ] && log "  [restore] Done"
+}
+
 # ─── Cleanup ─────────────────────────────────────────────────────
 
 cleanup() {
+    restore_zram_settings
     rm -rf "$TEST_DIR" 2>/dev/null
-    # Reset zram to a clean state on exit
-    if [ -w "${SYS_ZRAM}/reset" ]; then
-        echo 1 > "${SYS_ZRAM}/reset" 2>/dev/null
-    fi
-    # Note: disksize restoration skipped - system manages zram on boot
 }
 
 # ─── Prerequisites ───────────────────────────────────────────────
@@ -153,6 +192,9 @@ check_prereqs() {
     if [ ! -w "${SYS_ZRAM}/disksize" ]; then
         die "Cannot write to ${SYS_ZRAM}/disksize — check SELinux context"
     fi
+    
+    # Snapshot original settings for restoration on exit
+    snapshot_zram_settings
 
     # Create test directory
     mkdir -p "$TEST_DIR" || die "Cannot create test directory $TEST_DIR"
