@@ -1,6 +1,11 @@
 const DEBUG = false;
 if (DEBUG) console.log('[zram-bench] script loaded');
 
+window.onerror = function(msg, url, line, col, error) {
+    document.body.innerHTML = '<div style="padding:20px;color:#f44;font-family:monospace"><h2>JavaScript Error</h2><p>' + msg + '</p><p>Line: ' + line + '</p></div>';
+    return false;
+};
+
 // Sanitize HTML to prevent XSS
 function sanitize(str) {
     if (typeof str !== 'string') return '';
@@ -36,28 +41,7 @@ const MAX_HISTORY = 20;
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-const dom = {
-    version: $('#version'),
-    deviceModel: $('#device-model'),
-    deviceKernel: $('#device-kernel'),
-    deviceAlgo: $('#device-algo'),
-    deviceDisksize: $('#device-disksize'),
-    btnQuick: $('#btn-quick'),
-    btnFull: $('#btn-full'),
-    btnExportJson: $('#btn-export-json'),
-    btnExportCsv: $('#btn-export-csv'),
-    exportRow: $('#export-row'),
-    progressSection: $('#progress-section'),
-    progressPhase: $('#progress-phase'),
-    progressPct: $('#progress-pct'),
-    progressFill: $('#progress-fill'),
-    progressDetail: $('#progress-detail'),
-    resultsSection: $('#results-section'),
-    resultsSummary: $('#results-summary'),
-    resultsBody: $('#results-body'),
-    historyContainer: $('#history-container'),
-    btnClearHistory: $('#btn-clear-history'),
-};
+let dom = {};
 
 // ── Helpers ────────────────────────────────────────────────────
 async function shell(cmd, timeoutMs = 30000) {
@@ -67,9 +51,9 @@ async function shell(cmd, timeoutMs = 30000) {
         throw new Error('ksu.exec not available — root access required');
     }
     
-    return Promise.race([
-        // Try Promise-based API first (KernelSU standard)
-        (async () => {
+    return new Promise((resolve, reject) => {
+        let timerId;
+        const commandPromise = (async () => {
             try {
                 const result = await ksu.exec(cmd);
                 if (DEBUG) console.log('[zram-bench] ksu.exec result type:', typeof result);
@@ -79,21 +63,26 @@ async function shell(cmd, timeoutMs = 30000) {
                 return String(result);
             } catch (e) {
                 if (DEBUG) console.log('[zram-bench] Promise-based failed, trying callback:', e.message);
-                // Promise-based failed, try callback-based
-                return new Promise((resolve, reject) => {
+                return new Promise((resolve2, reject2) => {
                     try {
-                        ksu.exec(cmd, (result) => resolve(result));
+                        ksu.exec(cmd, (result) => resolve2(result));
                     } catch (e2) {
-                        reject(new Error('ksu.exec failed: ' + e2.message));
+                        reject2(new Error('ksu.exec failed: ' + e2.message));
                     }
                 });
             }
-        })(),
-        // Timeout
-        new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Command timed out after ' + (timeoutMs/1000) + 's')), timeoutMs);
-        })
-    ]);
+        })();
+        
+        timerId = setTimeout(() => reject(new Error('Command timed out after ' + (timeoutMs/1000) + 's')), timeoutMs);
+        
+        commandPromise.then((result) => {
+            clearTimeout(timerId);
+            resolve(result);
+        }, (err) => {
+            clearTimeout(timerId);
+            reject(err);
+        });
+    });
 }
 
 function shellLines(cmd) {
@@ -220,7 +209,7 @@ async function loadDeviceInfo() {
         const availableAlgos = algoLine.replace(/[\[\]]/g, '').trim().split(/\s+/).filter(Boolean);
         
         dom.deviceAlgo.textContent = currentAlgo || '--';
-        dom.deviceDisksize.textContent = disksize && disksize !== '0' ? disksize + ' MB' : '--';
+        dom.deviceDisksize.textContent = disksize && disksize !== '0' ? disksize + ' MB' : (disksize === '0' ? '0 MB (unconfigured)' : '--');
         
         // Update algorithm checkboxes based on device capabilities
         updateAlgoCheckboxes(availableAlgos, currentAlgo);
@@ -681,6 +670,42 @@ function downloadFile(content, filename, mime) {
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
     if (DEBUG) console.log('[zram-bench] init() START');
+    
+    // 1. Initialize DOM refs with null-ref validation
+    dom = {
+        version: $('#version'),
+        deviceModel: $('#device-model'),
+        deviceKernel: $('#device-kernel'),
+        deviceAlgo: $('#device-algo'),
+        deviceDisksize: $('#device-disksize'),
+        btnQuick: $('#btn-quick'),
+        btnFull: $('#btn-full'),
+        btnExportJson: $('#btn-export-json'),
+        btnExportCsv: $('#btn-export-csv'),
+        exportRow: $('#export-row'),
+        progressSection: $('#progress-section'),
+        progressPhase: $('#progress-phase'),
+        progressPct: $('#progress-pct'),
+        progressFill: $('#progress-fill'),
+        progressDetail: $('#progress-detail'),
+        resultsSection: $('#results-section'),
+        resultsSummary: $('#results-summary'),
+        resultsBody: $('#results-body'),
+        historyContainer: $('#history-container'),
+        btnClearHistory: $('#btn-clear-history'),
+    };
+    
+    // Validate critical DOM refs
+    for (const [key, el] of Object.entries(dom)) {
+        if (!el && key !== 'exportRow') {
+            console.error('[zram-bench] DOM ref missing: #' + key);
+        }
+    }
+    
+    // 2. Hide loading indicator
+    const loadingEl = document.getElementById('loading');
+    if (loadingEl) loadingEl.style.display = 'none';
+    
     const debugEl = document.getElementById('debug-output');
     const debugSection = document.getElementById('debug-section');
     try {
@@ -703,48 +728,61 @@ async function init() {
         }
         if (DEBUG) console.log('[zram-bench] debug section populated');
         
-        // Resolve bench binary path
-        if (DEBUG) console.log('[zram-bench] resolving bench binary...');
-        for (const candidate of BENCH_BIN_CANDIDATES) {
-            try {
-                if (DEBUG) console.log('[zram-bench] trying:', candidate);
-                const exists = await shell('test -x ' + candidate + ' && echo 1');
-                if (DEBUG) console.log('[zram-bench] result:', exists);
-                if (exists.trim() === '1') {
-                    BENCH_BIN = candidate;
-                    if (DEBUG) console.log('[zram-bench] FOUND:', candidate);
-                    break;
-                }
-            } catch (e) {
-                if (DEBUG) console.log('[zram-bench] candidate failed:', candidate, e.message);
-            }
-        }
-        if (DEBUG) console.log('[zram-bench] BENCH_BIN:', BENCH_BIN);
-        
-        try {
-            if (DEBUG) console.log('[zram-bench] loadDeviceInfo()...');
-            await loadDeviceInfo();
-            if (DEBUG) console.log('[zram-bench] loadDeviceInfo() done');
-        } catch (e) {
-            console.error('[zram-bench] loadDeviceInfo FAILED:', e);
-            if (debugEl) debugEl.textContent += '\nloadDeviceInfo error: ' + e.message;
-        }
-
+        // 3. Attach event listeners and load history immediately (don't wait for async ops)
         if (DEBUG) console.log('[zram-bench] attaching event listeners...');
-        dom.btnQuick.addEventListener('click', () => runBenchmark('quick'));
-        dom.btnFull.addEventListener('click', () => runBenchmark('full'));
-        dom.btnExportJson.addEventListener('click', exportJSON);
-        dom.btnExportCsv.addEventListener('click', exportCSV);
-        dom.btnClearHistory.addEventListener('click', () => {
+        if (dom.btnQuick) dom.btnQuick.addEventListener('click', () => runBenchmark('quick'));
+        if (dom.btnFull) dom.btnFull.addEventListener('click', () => runBenchmark('full'));
+        if (dom.btnExportJson) dom.btnExportJson.addEventListener('click', exportJSON);
+        if (dom.btnExportCsv) dom.btnExportCsv.addEventListener('click', exportCSV);
+        if (dom.btnClearHistory) dom.btnClearHistory.addEventListener('click', () => {
             if (confirm('Clear all benchmark history?')) clearHistory();
         });
+        
+        // Setup collapsible toggle
+        const advancedToggle = document.getElementById('advanced-toggle');
+        const advancedContent = document.getElementById('advanced-content');
+        if (advancedToggle && advancedContent) {
+            advancedToggle.addEventListener('click', () => {
+                const expanded = advancedContent.classList.toggle('expanded');
+                advancedToggle.setAttribute('aria-expanded', expanded);
+            });
+        }
+        
+        loadHistory();
+        
+        // 4. Parallelize bench binary resolution with device info loading
+        const resolveBin = (async () => {
+            if (DEBUG) console.log('[zram-bench] resolving bench binary...');
+            for (const candidate of BENCH_BIN_CANDIDATES) {
+                try {
+                    if (DEBUG) console.log('[zram-bench] trying:', candidate);
+                    const exists = await shell('test -x ' + candidate + ' && echo 1');
+                    if (DEBUG) console.log('[zram-bench] result:', exists);
+                    if (exists.trim() === '1') {
+                        BENCH_BIN = candidate;
+                        if (DEBUG) console.log('[zram-bench] FOUND:', candidate);
+                        break;
+                    }
+                } catch (e) {
+                    if (DEBUG) console.log('[zram-bench] candidate failed:', candidate, e.message);
+                }
+            }
+            if (DEBUG) console.log('[zram-bench] BENCH_BIN:', BENCH_BIN);
+        })();
+        
+        const loadDev = loadDeviceInfo().catch(e => {
+            console.error('[zram-bench] loadDeviceInfo FAILED:', e);
+            if (debugEl) debugEl.textContent += '\nloadDeviceInfo error: ' + e.message;
+        });
+        
+        await Promise.all([resolveBin, loadDev]);
+        
         if (debugEl) {
             debugEl.textContent += '\ninit() complete. BENCH_BIN=' + BENCH_BIN;
         }
         if (DEBUG) console.log('[zram-bench] init() COMPLETE');
     } catch (e) {
         console.error('[zram-bench] init() FAILED:', e);
-        // Show debug section and display error
         if (debugSection) debugSection.style.display = '';
         if (debugEl) {
             debugEl.textContent += '\n\nFATAL ERROR: ' + (e.message || e);

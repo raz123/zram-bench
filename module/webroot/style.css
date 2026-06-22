@@ -585,3 +585,50 @@ h2 {
         flex-direction: column;
     }
 }
+
+/* ── Collapsible Section ───────────────────────────────────── */
+.collapsible {
+    margin-top: 4px;
+}
+
+.collapsible-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.collapsible-toggle:hover {
+    background: var(--accent-dim);
+}
+
+.collapsible-toggle .chevron {
+    font-size: 14px;
+    transition: transform 0.25s ease;
+}
+
+.collapsible-toggle[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+}
+
+.collapsible-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.25s ease;
+    opacity: 0;
+}
+
+.collapsible-content.expanded {
+    max-height: 400px;
+    opacity: 1;
+    padding-top: 10px;
+}

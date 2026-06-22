@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="loading" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;display:flex;align-items:center;justify-content:center;z-index:9999;color:#4fc3f7;font-size:18px;">Loading ZRAM Benchmark...</div>
     <div class="container">
         <header>
             <div class="header-row">
@@ -49,45 +50,52 @@
                     </div>
                 </div>
                 
-                <div class="option-group">
-                    <label class="option-label">Test Patterns</label>
-                    <div class="checkbox-group">
-                        <label class="checkbox"><input type="checkbox" name="pattern" value="structured" checked> structured</label>
-                        <label class="checkbox"><input type="checkbox" name="pattern" value="mixed" checked> mixed</label>
-                        <label class="checkbox"><input type="checkbox" name="pattern" value="text" checked> text</label>
-                        <label class="checkbox"><input type="checkbox" name="pattern" value="zeros"> zeros</label>
-                        <label class="checkbox"><input type="checkbox" name="pattern" value="random"> random</label>
-                        <label class="checkbox"><input type="checkbox" name="pattern" value="compressible"> compressible</label>
-                    </div>
-                </div>
-                
-                <div class="option-row">
-                    <div class="option-group option-small">
-                        <label class="option-label">Data Size (MB)</label>
-                        <select id="opt-data-size" class="select-input">
-                            <option value="16">16</option>
-                            <option value="32">32</option>
-                            <option value="64" selected>64</option>
-                            <option value="128">128</option>
-                        </select>
-                    </div>
-                    <div class="option-group option-small">
-                        <label class="option-label">Iterations</label>
-                        <select id="opt-iterations" class="select-input">
-                            <option value="1">1</option>
-                            <option value="2">2</option>
-                            <option value="3" selected>3</option>
-                            <option value="5">5</option>
-                        </select>
-                    </div>
-                    <div class="option-group option-small">
-                        <label class="option-label">Streams</label>
-                        <select id="opt-streams" class="select-input">
-                            <option value="1">1</option>
-                            <option value="2" selected>2</option>
-                            <option value="4">4</option>
-                            <option value="8">8</option>
-                        </select>
+                <div class="collapsible">
+                    <button class="collapsible-toggle" id="advanced-toggle" aria-expanded="false">
+                        Advanced Options <span class="chevron">&#9662;</span>
+                    </button>
+                    <div class="collapsible-content" id="advanced-content">
+                        <div class="option-group">
+                            <label class="option-label">Test Patterns</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox"><input type="checkbox" name="pattern" value="structured" checked> structured</label>
+                                <label class="checkbox"><input type="checkbox" name="pattern" value="mixed" checked> mixed</label>
+                                <label class="checkbox"><input type="checkbox" name="pattern" value="text" checked> text</label>
+                                <label class="checkbox"><input type="checkbox" name="pattern" value="zeros"> zeros</label>
+                                <label class="checkbox"><input type="checkbox" name="pattern" value="random"> random</label>
+                                <label class="checkbox"><input type="checkbox" name="pattern" value="compressible"> compressible</label>
+                            </div>
+                        </div>
+                        
+                        <div class="option-row">
+                            <div class="option-group option-small">
+                                <label class="option-label">Data Size (MB)</label>
+                                <select id="opt-data-size" class="select-input">
+                                    <option value="16">16</option>
+                                    <option value="32">32</option>
+                                    <option value="64" selected>64</option>
+                                    <option value="128">128</option>
+                                </select>
+                            </div>
+                            <div class="option-group option-small">
+                                <label class="option-label">Iterations</label>
+                                <select id="opt-iterations" class="select-input">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3" selected>3</option>
+                                    <option value="5">5</option>
+                                </select>
+                            </div>
+                            <div class="option-group option-small">
+                                <label class="option-label">Streams</label>
+                                <select id="opt-streams" class="select-input">
+                                    <option value="1">1</option>
+                                    <option value="2" selected>2</option>
+                                    <option value="4">4</option>
+                                    <option value="8">8</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
