@@ -29,6 +29,7 @@ WARMUP=0
 RESULTS_FILE=""
 RESULTS_DIR=""
 RESULT_COUNT=0
+DICT_PATH=""           # Path to dictionary file for LZ4 backend (optional)
 
 # Original zram settings (restored on exit)
 ORIG_ALGORITHM=""
@@ -82,6 +83,7 @@ Options:
       --hz N              Kernel HZ value for CPU calculation (default: 250)
       --warmup N           Run N warmup iterations before benchmark (measure dictionary warmup)
       --skip-latency      Skip 4K latency measurement
+      --dict PATH         Dictionary file for LZ4 backend (sets algorithm_params)
       --skip-cpu          Skip CPU utilization measurement
   -v, --verbose           Verbose output to stderr
   -h, --help              Show this help text
@@ -103,6 +105,8 @@ Examples:
   ./zram_bench.sh -a "lz4 lzo" -m "zeros random" -n 5
   ./zram_bench.sh -s "1 4 8" -d 128 -o results.json
   ./zram_bench.sh --skip-latency -v
+  ./zram_bench.sh -a lz4 --dict /data/local/tmp/zram.dict -m text -n 5
+  ./zram_bench.sh -a lz4 --dict /data/local/tmp/zram.dict --warmup 3 -v
 EOF
     exit 0
 }
@@ -117,6 +121,7 @@ parse_args() {
             -d|--data-size)    DATA_SIZE_MB="$2";   shift 2;;
             -o|--output)       RESULTS_FILE="$2";   shift 2;;
             --hz)              HZ="$2";             shift 2;;
+            --dict)            DICT_PATH="$2";       shift 2;;
             --warmup)          WARMUP="$2";          shift 2;;
             --skip-latency)    SKIP_LATENCY=1;      shift;;
             --skip-cpu)        SKIP_CPU=1;          shift;;
@@ -216,6 +221,8 @@ setup_zram() {
         log "WARNING: Could not reset zram (swap may be active)"
         # Continue anyway - we can still write to zram
     }
+    # Re-apply dictionary if specified (reset clears algorithm_params)
+    set_dict "$DICT_PATH" || true
 
     return 0
 }
@@ -289,6 +296,31 @@ set_algorithm() {
     fi
 
     [ "$VERBOSE" -eq 1 ] && log "  Algorithm verified: $algo"
+    return 0
+}
+
+# Set dictionary path via algorithm_params. Must be called AFTER reset
+# and BEFORE set_algorithm/set_disksize.
+set_dict() {
+    local dict="$1"
+
+    if [ -z "$dict" ]; then
+        [ "$VERBOSE" -eq 1 ] && log "  No dictionary specified"
+        return 0
+    fi
+
+    if [ ! -f "$dict" ]; then
+        log "WARNING: Dictionary file not found: $dict"
+        return 1
+    fi
+
+    if [ ! -w "${SYS_ZRAM}/algorithm_params" ]; then
+        log "WARNING: algorithm_params not writable — dict support not available"
+        return 1
+    fi
+
+    echo "dict=${dict}" > "${SYS_ZRAM}/algorithm_params" 2>/dev/null
+    [ "$VERBOSE" -eq 1 ] && log "  Dictionary set: $dict"
     return 0
 }
 
@@ -694,6 +726,7 @@ run_single_bench() {
   "test_mode": "${mode}",
   "iteration": ${iter},
   "data_size_mb": ${DATA_SIZE_MB},
+  "dict": "${DICT_PATH:-none}",
   "time_real_write": ${write_elapsed},
   "time_real_read": ${read_elapsed},
   "throughput_write_mbs": ${write_mbs},
@@ -723,6 +756,7 @@ run_benchmark() {
     log "Modes:       $TEST_MODES"
     log "Streams:     $STREAMS"
     log "Iterations:  $ITERATIONS"
+    [ -n "$DICT_PATH" ] && log "Dictionary:  $DICT_PATH"
     log "Data size:   ${DATA_SIZE_MB}MB"
     log "Latency blk: ${LATENCY_SIZE_KB}KB (4K blocks)"
     [ "$WARMUP" -gt 0 ] && log "Warmup:      $WARMUP iterations"
