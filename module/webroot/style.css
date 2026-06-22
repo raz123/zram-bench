@@ -491,3 +491,92 @@ h2 {
     background: var(--border);
     border-radius: 3px;
 }
+
+/* Options Section */
+.options {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.options-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.option-group {
+    margin-bottom: 12px;
+}
+
+.option-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 6px 12px;
+    background: var(--surface-bg);
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.checkbox:hover {
+    background: var(--primary-color)20;
+}
+
+.checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary-color);
+}
+
+.option-row {
+    display: flex;
+    gap: 12px;
+}
+
+.option-small {
+    flex: 1;
+}
+
+.select-input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+}
+
+.select-input:focus {
+    border-color: var(--primary-color);
+}
+
+@media (max-width: 400px) {
+    .option-row {
+        flex-direction: column;
+    }
+}

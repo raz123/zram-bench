@@ -36,6 +36,62 @@
         </header>
 
         <main>
+            <section class="options" id="options-section">
+                <h2 class="options-title">Benchmark Options</h2>
+                
+                <div class="option-group">
+                    <label class="option-label">Algorithms</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox"><input type="checkbox" name="algo" value="lz4" checked> lz4</label>
+                        <label class="checkbox"><input type="checkbox" name="algo" value="zstd" checked> zstd</label>
+                        <label class="checkbox"><input type="checkbox" name="algo" value="lzo-rle"> lzo-rle</label>
+                        <label class="checkbox"><input type="checkbox" name="algo" value="lzo"> lzo</label>
+                    </div>
+                </div>
+                
+                <div class="option-group">
+                    <label class="option-label">Test Patterns</label>
+                    <div class="checkbox-group">
+                        <label class="checkbox"><input type="checkbox" name="pattern" value="structured" checked> structured</label>
+                        <label class="checkbox"><input type="checkbox" name="pattern" value="mixed" checked> mixed</label>
+                        <label class="checkbox"><input type="checkbox" name="pattern" value="text" checked> text</label>
+                        <label class="checkbox"><input type="checkbox" name="pattern" value="zeros"> zeros</label>
+                        <label class="checkbox"><input type="checkbox" name="pattern" value="random"> random</label>
+                        <label class="checkbox"><input type="checkbox" name="pattern" value="compressible"> compressible</label>
+                    </div>
+                </div>
+                
+                <div class="option-row">
+                    <div class="option-group option-small">
+                        <label class="option-label">Data Size (MB)</label>
+                        <select id="opt-data-size" class="select-input">
+                            <option value="16">16</option>
+                            <option value="32">32</option>
+                            <option value="64" selected>64</option>
+                            <option value="128">128</option>
+                        </select>
+                    </div>
+                    <div class="option-group option-small">
+                        <label class="option-label">Iterations</label>
+                        <select id="opt-iterations" class="select-input">
+                            <option value="1">1</option>
+                            <option value="2">2</option>
+                            <option value="3" selected>3</option>
+                            <option value="5">5</option>
+                        </select>
+                    </div>
+                    <div class="option-group option-small">
+                        <label class="option-label">Streams</label>
+                        <select id="opt-streams" class="select-input">
+                            <option value="1">1</option>
+                            <option value="2" selected>2</option>
+                            <option value="4">4</option>
+                            <option value="8">8</option>
+                        </select>
+                    </div>
+                </div>
+            </section>
+
             <section class="controls">
                 <div class="button-row">
                     <button id="btn-quick" class="btn btn-primary">

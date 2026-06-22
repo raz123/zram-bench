@@ -52,16 +52,21 @@ const dom = {
 };
 
 // ── Helpers ────────────────────────────────────────────────────
-function shell(cmd) {
+function shell(cmd, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error('Command timed out after ' + (timeoutMs/1000) + 's'));
+        }, timeoutMs);
+        
         if (typeof ksu !== 'undefined' && ksu.exec) {
             ksu.exec(cmd, (result) => {
+                clearTimeout(timer);
                 resolve(result);
             });
         } else {
-            // Fallback for desktop testing — use fetch to a local proxy or mock
-            console.warn('[mock] ksu.exec not available, using mock response');
-            reject(new Error('ksu.exec not available'));
+            clearTimeout(timer);
+            console.warn('[mock] ksu.exec not available');
+            reject(new Error('ksu.exec not available — root access required'));
         }
     });
 }
@@ -142,6 +147,36 @@ function avgOf(arr, key) {
 }
 
 // ── Device Info ────────────────────────────────────────────────
+// Update algorithm checkboxes based on device capabilities
+function updateAlgoCheckboxes(available, current) {
+    const container = document.querySelector('input[name="algo"]').closest('.checkbox-group');
+    if (!container) return;
+    
+    // Clear existing checkboxes
+    container.innerHTML = '';
+    
+    // Add checkboxes for available algorithms
+    available.forEach(algo => {
+        const label = document.createElement('label');
+        label.className = 'checkbox';
+        
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.name = 'algo';
+        input.value = algo;
+        input.checked = algo === current;  // Pre-check current algorithm
+        
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(' ' + algo));
+        container.appendChild(label);
+    });
+    
+    // If no algorithms found, show a message
+    if (available.length === 0) {
+        container.innerHTML = '<span class="empty-state">No algorithms detected</span>';
+    }
+}
+
 async function loadDeviceInfo() {
     try {
         const [model, kernel, algo, disksize] = await Promise.all([
@@ -153,9 +188,17 @@ async function loadDeviceInfo() {
 
         dom.deviceModel.textContent = model || '--';
         dom.deviceKernel.textContent = kernel || '--';
-        // comp_algorithm may have a prefix like [lz4]
-        dom.deviceAlgo.textContent = (algo || '--').replace(/[\[\]]/g, '').trim();
+        
+        // Parse comp_algorithm: "lzo lzo-rle [lz4] lz4hc lz4k lz4k_oplus lz4kd deflate 842 zstd"
+        const algoLine = (algo || '').trim();
+        const currentAlgo = (algoLine.match(/\[([^\]]+)\]/) || [])[1] || '';
+        const availableAlgos = algoLine.replace(/[\[\]]/g, '').trim().split(/\s+/).filter(Boolean);
+        
+        dom.deviceAlgo.textContent = currentAlgo || '--';
         dom.deviceDisksize.textContent = disksize && disksize !== '0' ? disksize + ' MB' : '--';
+        
+        // Update algorithm checkboxes based on device capabilities
+        updateAlgoCheckboxes(availableAlgos, currentAlgo);
 
         // Check if bench binary exists
         try {
@@ -192,19 +235,51 @@ function hideProgress() {
 }
 
 // ── Benchmark Execution ────────────────────────────────────────
+function getSelectedOptions() {
+    // Get selected algorithms
+    const algos = Array.from(document.querySelectorAll('input[name="algo"]:checked'))
+        .map(cb => cb.value);
+    
+    // Get selected patterns
+    const patterns = Array.from(document.querySelectorAll('input[name="pattern"]:checked'))
+        .map(cb => cb.value);
+    
+    // Get other options
+    const dataSize = document.getElementById('opt-data-size').value;
+    const iterations = document.getElementById('opt-iterations').value;
+    const streams = document.getElementById('opt-streams').value;
+    
+    return {
+        algos: algos.length > 0 ? algos : ['lz4'],
+        patterns: patterns.length > 0 ? patterns : ['zeros'],
+        dataSize: dataSize,
+        iterations: iterations,
+        streams: streams
+    };
+}
+
 function getBenchArgs(mode) {
-    // Quick: lz4 only, zeros+compressible, 2 streams, 1 iter, 32MB, skip-latency, skip-cpu
-    // Full: all algos, all modes, 3 iter, 64MB
+    const opts = getSelectedOptions();
+    
     if (mode === 'quick') {
-        return '-a lz4 -m "zeros compressible" -s 2 -n 1 -d 32 --skip-latency --skip-cpu';
+        // Quick: use first 2 algos, first 2 patterns, 1 iteration
+        const quickAlgos = opts.algos.slice(0, 2).join(' ');
+        const quickPatterns = opts.patterns.slice(0, 2).join(' ');
+        return '-a "' + quickAlgos + '" -m "' + quickPatterns + '" -s ' + opts.streams + ' -n 1 -d ' + opts.dataSize + ' --skip-latency --skip-cpu';
     }
-    return '-a "lz4 lzo" -m "zeros random compressible" -s "1 2 4" -n 3 -d 64';
+    
+    // Full: use all selected options
+    return '-a "' + opts.algos.join(' ') + '" -m "' + opts.patterns.join(' ') + '" -s ' + opts.streams + ' -n ' + opts.iterations + ' -d ' + opts.dataSize + ' --skip-latency --skip-cpu';
 }
 
 async function estimateTotalTests(mode) {
-    if (mode === 'quick') return 2; // 1 algo × 2 modes
-    // Full: 2 algos × 3 streams × 3 modes × 3 iters = 54
-    return 54;
+    const opts = getSelectedOptions();
+    if (mode === 'quick') {
+        return opts.algos.slice(0, 2).length * opts.patterns.slice(0, 2).length;
+    }
+    // Full: algos × streams × patterns × iterations
+    const streamsCount = opts.streams.includes(' ') ? opts.streams.split(' ').length : 1;
+    return opts.algos.length * streamsCount * opts.patterns.length * parseInt(opts.iterations);
 }
 
 async function runBenchmark(mode) {
