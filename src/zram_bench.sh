@@ -322,35 +322,85 @@ generate_text() {
 
 generate_structured() {
     local file="$1" mb="$2"
+    local block="${TEST_DIR}/.pat"
     local i=0
 
-    # Simulate app data: mix of headers, repeated structures, and some random IDs
-    # Each iteration: 720KB structured + 208KB random + 96KB zeros = 1024KB = 1MB
+    # Generate structured data simulating Android app metadata:
+    # JSON-like records with repeated key names, sequential IDs,
+    # cycling status values, and sequential timestamps.
+    # These patterns exercise dictionary-based matching differently
+    # across compression algorithms (LZ4 vs ZSTD vs LZO).
+    awk 'BEGIN {
+        n = 0; id = 1000
+        split("active,pending,error,idle,running", v, ",")
+        while (1) {
+            line = "{\"id\":" id ",\"name\":\"app_" (id % 100) "\",\"type\":\"session\",\"status\":\"" v[(id % 5) + 1] "\",\"ts\":" (1700000000 + id * 3) ",\"bytes\":" (id % 4096) "}"
+            len = length(line) + 1
+            if (n + len > 1048576) break
+            print line
+            n += len; id++
+        }
+    }' > "$block"
+
+    # Pad remainder with zeros to reach exactly 1MB
+    local cur
+    cur=$(wc -c < "$block")
+    dd if=/dev/zero bs=1 count=$((1048576 - cur)) 2>/dev/null >> "$block"
+
     : > "$file"
     while [ "$i" -lt "$mb" ]; do
-        # 720KB structured (highly compressible)
-        dd if=/dev/zero bs=737280 count=1 2>/dev/null | tr '\0' 'S' >> "$file"
-        # 208KB semi-random (like IDs, timestamps)
-        dd if=/dev/urandom bs=212992 count=1 2>/dev/null >> "$file"
-        # 96KB zeros (like padding)
-        dd if=/dev/zero bs=98304 count=1 2>/dev/null >> "$file"
+        cat "$block" >> "$file"
         i=$((i + 1))
     done
+
+    rm -f "$block"
 }
 
 generate_mixed() {
     local file="$1" mb="$2"
-    local i=0
+    local block="${TEST_DIR}/.pat"
+    local sub_text="${TEST_DIR}/.mt"
+    local sub_struct="${TEST_DIR}/.ms"
+    local i=0 cur
 
-    # Realistic mix: 40% zeros, 30% compressible, 30% random
-    # Each iteration: 410KB zeros + 307KB compressible + 307KB random = 1024KB = 1MB
+    # 30% text (314573 bytes) — repeating natural language pangrams
+    awk 'BEGIN {
+        txt = "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump! "
+        tlen = length(txt); n = 0
+        while (n + tlen <= 314573) { printf "%s", txt; n += tlen }
+    }' > "$sub_text"
+    cur=$(wc -c < "$sub_text")
+    dd if=/dev/zero bs=1 count=$((314573 - cur)) 2>/dev/null >> "$sub_text"
+
+    # 30% structured (314573 bytes) — JSON-like event records
+    awk 'BEGIN {
+        n = 0; id = 4000
+        split("active,pending,error", v, ",")
+        while (1) {
+            line = "{\"id\":" id ",\"type\":\"event\",\"status\":\"" v[(id % 3) + 1] "\",\"pid\":" (id % 32768) "}"
+            len = length(line) + 1
+            if (n + len > 314573) break
+            print line; n += len; id++
+        }
+    }' > "$sub_struct"
+    cur=$(wc -c < "$sub_struct")
+    dd if=/dev/zero bs=1 count=$((314573 - cur)) 2>/dev/null >> "$sub_struct"
+
+    # Assemble 1MB block: text + structured + random + zeros
+    # 314573 + 314573 + 209715 + 209715 = 1048576
+    : > "$block"
+    cat "$sub_text" >> "$block"
+    cat "$sub_struct" >> "$block"
+    dd if=/dev/urandom bs=209715 count=1 2>/dev/null >> "$block"
+    dd if=/dev/zero bs=209715 count=1 2>/dev/null >> "$block"
+
     : > "$file"
     while [ "$i" -lt "$mb" ]; do
-        dd if=/dev/zero bs=419840 count=1 2>/dev/null >> "$file"      # 40% zeros
-        dd if=/dev/zero bs=1 count=314368 2>/dev/null | tr '\0' 'M' >> "$file"  # 30% compressible
-        dd if=/dev/urandom bs=314368 count=1 2>/dev/null >> "$file"   # 30% random
+        cat "$block" >> "$file"
         i=$((i + 1))
     done
+
+    rm -f "$block" "$sub_text" "$sub_struct"
 }
 
 # Dispatch pattern generation by mode name.

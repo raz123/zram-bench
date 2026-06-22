@@ -39,9 +39,7 @@ Device-specific findings for ZRAM benchmarking on Qualcomm SM8250-based devices.
 
 ### Multi-Stream
 
-- 2 streams appears optimal for SM8250
-- 4 streams shows marginal throughput improvement but higher memory overhead
-- Beyond 4 streams, results are inconsistent due to cache contention
+- **CRITICAL: On SM8250 (8 cores), max_comp_streams silently ignores values below 8.** Setting 1, 2, or 4 streams has no effect — the kernel uses all 8 cores regardless. Verify with: `cat /sys/block/zram0/max_comp_streams` after setting.
 
 ### CPU Utilization
 
@@ -53,10 +51,12 @@ Device-specific findings for ZRAM benchmarking on Qualcomm SM8250-based devices.
 
 - SM8250 devices typically ship with kernel 4.19 (Qualcomm's android-4.19 branch)
 - Some custom ROMs may use 5.4 or 5.10 kernels
+- **CRITICAL**: On SM8250 (4.19), the algorithm MUST be set before disksize. Setting disksize first causes the algorithm write to fail silently.
 - Algorithm names may differ between kernel versions:
-  - Older kernels: `lzo`
-  - Newer kernels (4.19+): `lzo-rle` (run-length enhanced variant)
+  - On SM8250 (4.19), only `lzo-rle` is available. The plain `lzo` name is rejected with an error.
   - `zram_bench.sh` maps `lzo` -> `lzo-rle` automatically when needed
+- After a zram reset (`echo 1 > reset`), the default algorithm reverts to lz4 (CONFIG_ZRAM_DEF_COMP). The script resets the device before each test, so the algorithm must be re-set each time.
+- **No `algorithm_params` support** — dict= and level= parameters require kernel 6.x+ (Sergey Senozhatsky's "custom comp backends API", 2024). Not available on 4.19.
 
 ## Recommendations for SM8250
 
@@ -68,5 +68,5 @@ Device-specific findings for ZRAM benchmarking on Qualcomm SM8250-based devices.
 ## Known Issues
 
 - Some SM8250 devices report 0 for `compr_data_size` when compression ratio is "inf" (all zeros). This is expected behavior — the kernel optimizes zero pages to use no compressed storage.
-- Memory overhead measurement via `mm_stat` may show 0 on older kernels that don't expose per-device memory usage. Use `mem_used_total` from the zram sysfs directly.
+- On newer kernels, individual sysfs files (orig_data_size, compr_data_size, mem_used_total) may not exist. `mm_stat` is the standard source — it is a space-separated file with fields: orig_data_size, compr_data_size, mem_used_total, same_pages, pages_compacted, huge_pages.
 - CPU HZ may differ from the default 250 — use `--hz` to override if CPU percentages look incorrect.
