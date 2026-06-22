@@ -1,4 +1,5 @@
-console.log('[zram-bench] script loaded');
+const DEBUG = false;
+if (DEBUG) console.log('[zram-bench] script loaded');
 
 // Sanitize HTML to prevent XSS
 function sanitize(str) {
@@ -60,7 +61,7 @@ const dom = {
 
 // ── Helpers ────────────────────────────────────────────────────
 async function shell(cmd, timeoutMs = 30000) {
-    console.log('[zram-bench] shell():', cmd.substring(0, 80));
+    if (DEBUG) console.log('[zram-bench] shell():', cmd.substring(0, 80));
     if (typeof ksu === 'undefined' || typeof ksu.exec !== 'function') {
         console.error('[zram-bench] ksu.exec NOT available');
         throw new Error('ksu.exec not available — root access required');
@@ -71,13 +72,13 @@ async function shell(cmd, timeoutMs = 30000) {
         (async () => {
             try {
                 const result = await ksu.exec(cmd);
-                console.log('[zram-bench] ksu.exec result type:', typeof result);
+                if (DEBUG) console.log('[zram-bench] ksu.exec result type:', typeof result);
                 if (typeof result === 'object' && result !== null) {
                     return result.stdout || JSON.stringify(result);
                 }
                 return String(result);
             } catch (e) {
-                console.log('[zram-bench] Promise-based failed, trying callback:', e.message);
+                if (DEBUG) console.log('[zram-bench] Promise-based failed, trying callback:', e.message);
                 // Promise-based failed, try callback-based
                 return new Promise((resolve, reject) => {
                     try {
@@ -272,6 +273,21 @@ function getSelectedOptions() {
     const dataSize = document.getElementById('opt-data-size').value;
     const iterations = document.getElementById('opt-iterations').value;
     const streams = document.getElementById('opt-streams').value;
+
+    // Validate whitelist
+    const algoRe = /^[a-z0-9_-]+$/;
+    const patternRe = /^[a-z]+$/;
+    const numRe = /^[0-9]+$/;
+
+    for (const a of (algos.length > 0 ? algos : ['lz4'])) {
+        if (!algoRe.test(a)) throw new Error('Invalid algorithm name: ' + a);
+    }
+    for (const p of (patterns.length > 0 ? patterns : ['zeros'])) {
+        if (!patternRe.test(p)) throw new Error('Invalid test pattern: ' + p);
+    }
+    if (!numRe.test(dataSize)) throw new Error('Invalid data size: ' + dataSize);
+    if (!numRe.test(iterations)) throw new Error('Invalid iterations: ' + iterations);
+    if (!numRe.test(streams)) throw new Error('Invalid streams: ' + streams);
     
     return {
         algos: algos.length > 0 ? algos : ['lz4'],
@@ -307,7 +323,7 @@ async function estimateTotalTests(mode) {
 }
 
 async function runBenchmark(mode) {
-    console.log('[zram-bench] runBenchmark() START, mode:', mode);
+    if (DEBUG) console.log('[zram-bench] runBenchmark() START, mode:', mode);
     if (state.running) return;
     state.running = true;
 
@@ -344,8 +360,8 @@ async function runBenchmark(mode) {
 
     try {
         // Clear old results first
-        await shell('rm -rf /data/local/tmp/zram-bench/.results');
-        await shell('mkdir -p /data/local/tmp/zram-bench/.results');
+        await shell('rm -rf /data/local/tmp/zram_bench/.results');
+        await shell('mkdir -p /data/local/tmp/zram_bench/.results');
 
         updateProgress(0, 'Running benchmark...', '');
 
@@ -409,16 +425,16 @@ function renderResults(results, mode, comparisonTarget) {
 
         summaryHTML += `
             <div class="summary-card">
-                <span class="label">${algo} Write</span>
-                <span class="value">${formatMBs(avgWrite)}</span>
+                <span class="label">${sanitize(algo)} Write</span>
+                <span class="value">${sanitize(formatMBs(avgWrite))}</span>
             </div>
             <div class="summary-card">
-                <span class="label">${algo} Read</span>
-                <span class="value">${formatMBs(avgRead)}</span>
+                <span class="label">${sanitize(algo)} Read</span>
+                <span class="value">${sanitize(formatMBs(avgRead))}</span>
             </div>
             <div class="summary-card">
-                <span class="label">${algo} Ratio</span>
-                <span class="value">${formatRatio(avgRatio)}x</span>
+                <span class="label">${sanitize(algo)} Ratio</span>
+                <span class="value">${sanitize(formatRatio(avgRatio))}x</span>
             </div>`;
     }
     dom.resultsSummary.innerHTML = summaryHTML;
@@ -438,13 +454,13 @@ function renderResults(results, mode, comparisonTarget) {
         }
 
         tbody += `<tr>
-            <td>${row.algorithm}</td>
-            <td>${row.mode}</td>
-            <td>${row.streams}</td>
-            <td class="${writeClass}">${formatMBs(row.write)}</td>
-            <td class="${readClass}">${formatMBs(row.read)}</td>
-            <td>${formatRatio(row.ratio)}</td>
-            <td>${row.latency > 0 ? row.latency.toFixed(1) : '--'}</td>
+            <td>${sanitize(row.algorithm)}</td>
+            <td>${sanitize(row.mode)}</td>
+            <td>${sanitize(String(row.streams))}</td>
+            <td class="${writeClass}">${sanitize(formatMBs(row.write))}</td>
+            <td class="${readClass}">${sanitize(formatMBs(row.read))}</td>
+            <td>${sanitize(formatRatio(row.ratio))}</td>
+            <td>${row.latency > 0 ? sanitize(row.latency.toFixed(1)) : '--'}</td>
         </tr>`;
     }
     dom.resultsBody.innerHTML = tbody;
@@ -524,7 +540,14 @@ function saveHistory(results, mode) {
     if (state.history.length > MAX_HISTORY) {
         state.history = state.history.slice(0, MAX_HISTORY);
     }
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+    try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+    } catch (e) {
+        // Revert the unshift on quota exceeded or other storage errors
+        state.history.shift();
+        toast('Could not save history: storage full', 'error');
+        console.error('saveHistory localStorage error:', e);
+    }
     renderHistory();
 }
 
@@ -542,13 +565,13 @@ function renderHistory() {
         html += `
             <div class="history-item${state.activeHistoryIdx === idx ? ' active' : ''}" data-idx="${idx}">
                 <div class="history-meta">
-                    <span class="history-date">${formatDate(entry.timestamp)}</span>
-                    <span class="history-type ${entry.mode}">${entry.mode}</span>
+                    <span class="history-date">${sanitize(formatDate(entry.timestamp))}</span>
+                    <span class="history-type ${sanitize(entry.mode)}">${sanitize(entry.mode)}</span>
                 </div>
                 <div class="history-stats">
-                    <span>${entry.count} tests</span>
-                    <span>Write: ${entry.avgWrite} MB/s</span>
-                    <span>Read: ${entry.avgRead} MB/s</span>
+                    <span>${sanitize(String(entry.count))} tests</span>
+                    <span>Write: ${sanitize(entry.avgWrite)} MB/s</span>
+                    <span>Read: ${sanitize(entry.avgRead)} MB/s</span>
                 </div>
             </div>`;
     });
@@ -657,67 +680,77 @@ function downloadFile(content, filename, mime) {
 
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
-    console.log('[zram-bench] init() START');
-    // Debug: show API surface
+    if (DEBUG) console.log('[zram-bench] init() START');
     const debugEl = document.getElementById('debug-output');
-    console.log('[zram-bench] debugEl:', debugEl ? 'found' : 'NOT FOUND');
-    if (debugEl) {
-        const info = [];
-        info.push('typeof ksu: ' + typeof ksu);
-        info.push('typeof window.ksu: ' + typeof window.ksu);
-        info.push('typeof kernelsu: ' + typeof kernelsu);
-        info.push('typeof window.KSU: ' + typeof window.KSU);
-        if (typeof ksu === 'object' && ksu) {
-            info.push('ksu keys: ' + Object.keys(ksu).join(', '));
-        }
-        if (typeof window.ksu === 'object' && window.ksu) {
-            info.push('window.ksu keys: ' + Object.keys(window.ksu).join(', '));
-        }
-        // Check for common KernelSU API variations
-        info.push('navigator.userAgent: ' + navigator.userAgent.substring(0, 80));
-        debugEl.textContent = info.join('\n');
-    }
-    console.log('[zram-bench] debug section populated');
-    
-    // Resolve bench binary path
-    console.log('[zram-bench] resolving bench binary...');
-    for (const candidate of BENCH_BIN_CANDIDATES) {
-        try {
-            console.log('[zram-bench] trying:', candidate);
-            const exists = await shell('test -x ' + candidate + ' && echo 1');
-            console.log('[zram-bench] result:', exists);
-            if (exists.trim() === '1') {
-                BENCH_BIN = candidate;
-                console.log('[zram-bench] FOUND:', candidate);
-                break;
-            }
-        } catch (e) {
-            console.log('[zram-bench] candidate failed:', candidate, e.message);
-        }
-    }
-    console.log('[zram-bench] BENCH_BIN:', BENCH_BIN);
-    
+    const debugSection = document.getElementById('debug-section');
     try {
-        console.log('[zram-bench] loadDeviceInfo()...');
-        await loadDeviceInfo();
-        console.log('[zram-bench] loadDeviceInfo() done');
-    } catch (e) {
-        console.error('[zram-bench] loadDeviceInfo FAILED:', e);
-        if (debugEl) debugEl.textContent += '\nloadDeviceInfo error: ' + e.message;
-    }
+        // Debug: show API surface
+        if (DEBUG) console.log('[zram-bench] debugEl:', debugEl ? 'found' : 'NOT FOUND');
+        if (debugEl) {
+            const info = [];
+            info.push('typeof ksu: ' + typeof ksu);
+            info.push('typeof window.ksu: ' + typeof window.ksu);
+            info.push('typeof kernelsu: ' + typeof kernelsu);
+            info.push('typeof window.KSU: ' + typeof window.KSU);
+            if (typeof ksu === 'object' && ksu) {
+                info.push('ksu keys: ' + Object.keys(ksu).join(', '));
+            }
+            if (typeof window.ksu === 'object' && window.ksu) {
+                info.push('window.ksu keys: ' + Object.keys(window.ksu).join(', '));
+            }
+            info.push('navigator.userAgent: ' + navigator.userAgent.substring(0, 80));
+            debugEl.textContent = info.join('\n');
+        }
+        if (DEBUG) console.log('[zram-bench] debug section populated');
+        
+        // Resolve bench binary path
+        if (DEBUG) console.log('[zram-bench] resolving bench binary...');
+        for (const candidate of BENCH_BIN_CANDIDATES) {
+            try {
+                if (DEBUG) console.log('[zram-bench] trying:', candidate);
+                const exists = await shell('test -x ' + candidate + ' && echo 1');
+                if (DEBUG) console.log('[zram-bench] result:', exists);
+                if (exists.trim() === '1') {
+                    BENCH_BIN = candidate;
+                    if (DEBUG) console.log('[zram-bench] FOUND:', candidate);
+                    break;
+                }
+            } catch (e) {
+                if (DEBUG) console.log('[zram-bench] candidate failed:', candidate, e.message);
+            }
+        }
+        if (DEBUG) console.log('[zram-bench] BENCH_BIN:', BENCH_BIN);
+        
+        try {
+            if (DEBUG) console.log('[zram-bench] loadDeviceInfo()...');
+            await loadDeviceInfo();
+            if (DEBUG) console.log('[zram-bench] loadDeviceInfo() done');
+        } catch (e) {
+            console.error('[zram-bench] loadDeviceInfo FAILED:', e);
+            if (debugEl) debugEl.textContent += '\nloadDeviceInfo error: ' + e.message;
+        }
 
-    console.log('[zram-bench] attaching event listeners...');
-    dom.btnQuick.addEventListener('click', () => runBenchmark('quick'));
-    dom.btnFull.addEventListener('click', () => runBenchmark('full'));
-    dom.btnExportJson.addEventListener('click', exportJSON);
-    dom.btnExportCsv.addEventListener('click', exportCSV);
-    dom.btnClearHistory.addEventListener('click', () => {
-        if (confirm('Clear all benchmark history?')) clearHistory();
-    });
-    if (debugEl) {
-        debugEl.textContent += '\ninit() complete. BENCH_BIN=' + BENCH_BIN;
+        if (DEBUG) console.log('[zram-bench] attaching event listeners...');
+        dom.btnQuick.addEventListener('click', () => runBenchmark('quick'));
+        dom.btnFull.addEventListener('click', () => runBenchmark('full'));
+        dom.btnExportJson.addEventListener('click', exportJSON);
+        dom.btnExportCsv.addEventListener('click', exportCSV);
+        dom.btnClearHistory.addEventListener('click', () => {
+            if (confirm('Clear all benchmark history?')) clearHistory();
+        });
+        if (debugEl) {
+            debugEl.textContent += '\ninit() complete. BENCH_BIN=' + BENCH_BIN;
+        }
+        if (DEBUG) console.log('[zram-bench] init() COMPLETE');
+    } catch (e) {
+        console.error('[zram-bench] init() FAILED:', e);
+        // Show debug section and display error
+        if (debugSection) debugSection.style.display = '';
+        if (debugEl) {
+            debugEl.textContent += '\n\nFATAL ERROR: ' + (e.message || e);
+        }
+        toast('Initialization failed: ' + e.message, 'error');
     }
-    console.log('[zram-bench] init() COMPLETE');
 }
 
 document.addEventListener('DOMContentLoaded', init);

@@ -23,6 +23,11 @@
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     --radius: 8px;
     --radius-lg: 12px;
+    /* Aliases for option section styles */
+    --card-bg: var(--bg-card);
+    --surface-bg: var(--bg-input);
+    --primary-color: var(--accent);
+    --border-color: var(--border);
 }
 
 html {
@@ -541,7 +546,7 @@ h2 {
 }
 
 .checkbox:hover {
-    background: var(--primary-color)20;
+    background: var(--accent-dim);
 }
 
 .checkbox input[type="checkbox"] {
