@@ -659,8 +659,15 @@ async function runBenchmark(mode) {
 
         clearInterval(progressTimer);
 
-        // Read results
-        const raw = await shell('cat ' + RESULTS_PATH);
+        // Read results — wait for file to be stable
+        let raw = '';
+        for (let attempt = 0; attempt < 5; attempt++) {
+            try {
+                raw = await shell('cat ' + RESULTS_PATH);
+                if (raw && raw.trim().startsWith('[')) break;
+            } catch (_) {}
+            await new Promise(r => setTimeout(r, 1000));
+        }
         const results = JSON.parse(raw);
 
         updateProgress(100, 'Complete', results.length + ' tests finished');
