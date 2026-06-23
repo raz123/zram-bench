@@ -229,14 +229,21 @@ async function installCLI() {
     if (btn) btn.disabled = true;
     try {
         // Primary: try symlink in /system/bin
+        let systemInstalled = false;
         try {
-            await shell('mount -o remount,rw /system && ln -sf /data/adb/modules/zram_bench/zram-bench /system/bin/zram-bench && mount -o remount,ro /system');
+            await shell('mount -o remount,rw /system');
+            await shell('ln -sf /data/adb/modules/zram_bench/zram-bench /system/bin/zram-bench');
+            systemInstalled = true;
+        } catch (e1) {
+            if (DEBUG) console.log('[zram-bench] system install failed:', e1.message);
+        } finally {
+            await shell('mount -o remount,ro /system 2>/dev/null || true');
+        }
+        if (systemInstalled) {
             dom.version.textContent = 'CLI installed (system)';
             toast('CLI installed to /system/bin/zram-bench', 'success');
             if (btn) btn.style.display = 'none';
             return;
-        } catch (e1) {
-            if (DEBUG) console.log('[zram-bench] system install failed:', e1.message);
         }
         // Fallback: copy to /data/local/bin
         await shell('mkdir -p /data/local/bin && cp /data/adb/modules/zram_bench/zram-bench /data/local/bin/zram-bench && chmod +x /data/local/bin/zram-bench');
@@ -411,9 +418,11 @@ async function applyZramChanges() {
             await shell('echo ' + newDisksize + ' > /sys/block/zram0/disksize');
         }
 
-        // 5. Re-enable swap if it was active
-        const swapWasActive = await checkZramSwap();
-        // checkZramSwap will return false after reset, we don't re-enable swap automatically
+        // 5. Re-enable swap
+        await shell('mkswap /dev/block/zram0 2>/dev/null || true');
+        await shell('swapon /dev/block/zram0 2>/dev/null || true');
+        // Update swap warning UI
+        await checkZramSwap();
 
         // Update state
         zramCurrent.algo = newAlgo;
@@ -466,6 +475,9 @@ async function resetZramDefaults() {
         await shell('echo ' + sanitize(zramDefaults.algo) + ' > /sys/block/zram0/comp_algorithm');
         await shell('echo ' + parseInt(zramDefaults.streams, 10) + ' > /sys/block/zram0/max_comp_streams');
         await shell('echo ' + zramDefaults.disksize + ' > /sys/block/zram0/disksize');
+        // Re-enable swap after reset
+        await shell('mkswap /dev/block/zram0 2>/dev/null || true');
+        await shell('swapon /dev/block/zram0 2>/dev/null || true');
 
         zramCurrent.algo = zramDefaults.algo;
         zramCurrent.disksize = zramDefaults.disksize;

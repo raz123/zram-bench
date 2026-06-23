@@ -38,6 +38,10 @@ if [ -f "$ZRAM_CONFIG" ] && command -v jq >/dev/null 2>&1; then
     if [ -n "$DISKSIZE" ] && [ "$DISKSIZE" -gt 0 ] 2>/dev/null; then
         echo "$DISKSIZE" > "$ZRAM_DEV/disksize" 2>/dev/null
     fi
+
+    # Re-enable swap
+    mkswap /dev/block/zram0 2>/dev/null
+    swapon /dev/block/zram0 2>/dev/null
 fi
 
 exit 0
