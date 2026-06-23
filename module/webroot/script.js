@@ -219,15 +219,6 @@ async function loadDeviceInfo() {
         // Update algorithm checkboxes based on device capabilities
         updateAlgoCheckboxes(availableAlgos, currentAlgo);
 
-        // Check if bench binary exists
-        try {
-            const exists = await shell('test -x ' + BENCH_BIN + ' && echo 1 || echo 0');
-            if (exists.trim() === '0') {
-                dom.version.textContent = 'bench not installed';
-            }
-        } catch (_) {
-            dom.version.textContent = 'bench not installed';
-        }
     } catch (e) {
         console.error('loadDeviceInfo:', e);
     }
@@ -781,6 +772,16 @@ async function init() {
         });
         
         await Promise.all([resolveBin, loadDev]);
+        
+        // Check bench binary after resolution
+        try {
+            const exists = await shell('test -x ' + BENCH_BIN + ' && echo 1 || echo 0');
+            if (exists.trim() === '0') {
+                dom.version.textContent = 'bench not installed';
+            }
+        } catch (_) {
+            dom.version.textContent = 'bench not installed';
+        }
         
         if (debugEl) {
             debugEl.textContent += '\ninit() complete. BENCH_BIN=' + BENCH_BIN;
