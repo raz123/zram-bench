@@ -645,3 +645,154 @@ h2 {
     .collapsible-content { transition: none; }
     .collapsible-toggle .chevron { transition: none; }
 }
+/* ── Install CLI Button ────────────────────────────────────── */
+.btn-install-cli {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    background: var(--accent-dim);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, opacity 0.2s;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.btn-install-cli:hover:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+}
+
+.btn-install-cli:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── ZRAM Settings Section ─────────────────────────────────── */
+.zram-warning {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid var(--warning);
+    color: var(--warning);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-bottom: 12px;
+}
+
+.zram-setting-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+}
+
+.zram-setting-card.zram-danger {
+    border-color: rgba(248, 113, 113, 0.3);
+}
+
+.zram-setting-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.zram-setting-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.zram-setting-meta {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.zram-setting-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.zram-setting-row .select-small {
+    width: auto;
+    min-width: 70px;
+}
+
+.number-input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    outline: none;
+}
+
+.number-input:focus {
+    border-color: var(--primary-color);
+}
+
+.number-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.select-small {
+    padding: 8px 10px;
+    font-size: 13px;
+    background: var(--surface-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    outline: none;
+    cursor: pointer;
+}
+
+.select-small:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.zram-danger-text {
+    color: var(--danger);
+    font-size: 0.7rem;
+    margin-top: 6px;
+    font-weight: 500;
+}
+
+.zram-setting-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.zram-setting-actions .btn {
+    flex: 1;
+}
+
+.zram-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: transparent;
+    flex-shrink: 0;
+}
+
+.zram-status-dot-changed {
+    background: var(--warning);
+    box-shadow: 0 0 6px var(--warning);
+}

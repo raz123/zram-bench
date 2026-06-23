@@ -223,6 +223,298 @@ async function loadDeviceInfo() {
         console.error('loadDeviceInfo:', e);
     }
 }
+// ── Install CLI ────────────────────────────────────────────────
+async function installCLI() {
+    const btn = document.getElementById('btn-install-cli');
+    if (btn) btn.disabled = true;
+    try {
+        // Primary: try symlink in /system/bin
+        try {
+            await shell('mount -o remount,rw /system && ln -sf /data/adb/modules/zram_bench/zram-bench /system/bin/zram-bench && mount -o remount,ro /system');
+            dom.version.textContent = 'CLI installed (system)';
+            toast('CLI installed to /system/bin/zram-bench', 'success');
+            if (btn) btn.style.display = 'none';
+            return;
+        } catch (e1) {
+            if (DEBUG) console.log('[zram-bench] system install failed:', e1.message);
+        }
+        // Fallback: copy to /data/local/bin
+        await shell('mkdir -p /data/local/bin && cp /data/adb/modules/zram_bench/zram-bench /data/local/bin/zram-bench && chmod +x /data/local/bin/zram-bench');
+        dom.version.textContent = 'CLI installed (local)';
+        toast('CLI installed to /data/local/bin/zram-bench', 'success');
+        if (btn) btn.style.display = 'none';
+    } catch (e) {
+        toast('Install failed: ' + e.message, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+// ── ZRAM Settings ─────────────────────────────────────────────
+const ZRAM_CONFIG_PATH = '/data/adb/modules/zram_bench/zram_config.json';
+let zramDefaults = { algo: '', disksize: 0, streams: 0 };
+let zramCurrent = { algo: '', disksize: 0, streams: 0 };
+
+async function loadZramSettings() {
+    try {
+        const [algoRaw, disksizeRaw, streamsRaw, cpusRaw] = await Promise.all([
+            shell('cat /sys/block/zram0/comp_algorithm 2>/dev/null || echo --'),
+            shell('cat /sys/block/zram0/disksize 2>/dev/null || echo 0'),
+            shell('cat /sys/block/zram0/max_comp_streams 2>/dev/null || echo --'),
+            shell('nproc 2>/dev/null || echo 4'),
+        ]);
+
+        // Parse algorithm: "lzo lzo-rle [lz4] lz4hc..."
+        const algoLine = (algoRaw || '').trim();
+        const currentAlgo = (algoLine.match(/\[([^\]]+)\]/) || [])[1] || '';
+        const availableAlgos = algoLine.replace(/[[\]]/g, '').trim().split(/\s+/).filter(Boolean);
+
+        zramCurrent.algo = currentAlgo;
+        zramCurrent.disksize = parseInt(disksizeRaw, 10) || 0;
+        zramCurrent.streams = parseInt(streamsRaw, 10) || 0;
+
+        if (!zramDefaults.algo) zramDefaults.algo = currentAlgo;
+        if (!zramDefaults.disksize) zramDefaults.disksize = zramCurrent.disksize;
+        if (!zramDefaults.streams) zramDefaults.streams = zramCurrent.streams;
+
+        const cpus = parseInt(cpusRaw, 10) || 4;
+        const totalMem = await shell('awk \'/MemTotal/{print $2}\' /proc/meminfo 2>/dev/null || echo 0');
+        const maxDiskMB = Math.floor((parseInt(totalMem, 10) || 0) / 2 / 1024);
+
+        populateZramControls(availableAlgos, cpus, maxDiskMB);
+        await checkZramSwap();
+    } catch (e) {
+        console.error('[zram-bench] loadZramSettings:', e);
+        toast('Failed to load ZRAM settings: ' + e.message, 'error');
+    }
+}
+
+function populateZramControls(availableAlgos, cpus, maxDiskMB) {
+    // Algorithm select
+    const algoSelect = document.getElementById('zram-algo-select');
+    if (algoSelect) {
+        algoSelect.innerHTML = '';
+        for (const algo of availableAlgos) {
+            const opt = document.createElement('option');
+            opt.value = algo;
+            opt.textContent = algo;
+            if (algo === zramCurrent.algo) opt.selected = true;
+            algoSelect.appendChild(opt);
+        }
+    }
+
+    // Current/default displays
+    const algoCurrentEl = document.getElementById('algo-current');
+    const algoDefaultEl = document.getElementById('algo-default');
+    if (algoCurrentEl) algoCurrentEl.textContent = zramCurrent.algo || '--';
+    if (algoDefaultEl) algoDefaultEl.textContent = zramDefaults.algo || '--';
+
+    // Disk size
+    const disksizeInput = document.getElementById('zram-disksize-input');
+    const disksizeCurrentEl = document.getElementById('disksize-current');
+    const disksizeMaxEl = document.getElementById('disksize-max');
+    const disksizeMB = Math.floor(zramCurrent.disksize / 1048576);
+    const defaultDiskMB = Math.floor(zramDefaults.disksize / 1048576);
+    if (disksizeInput) {
+        disksizeInput.max = maxDiskMB || '';
+        disksizeInput.value = disksizeMB;
+    }
+    if (disksizeCurrentEl) disksizeCurrentEl.textContent = disksizeMB + ' MB';
+    if (disksizeMaxEl) disksizeMaxEl.textContent = maxDiskMB + ' MB';
+
+    // Streams
+    const streamsInput = document.getElementById('zram-streams-input');
+    const streamsCurrentEl = document.getElementById('streams-current');
+    const streamsMaxEl = document.getElementById('streams-max');
+    if (streamsInput) {
+        streamsInput.value = zramCurrent.streams;
+        streamsInput.max = cpus;
+    }
+    if (streamsCurrentEl) streamsCurrentEl.textContent = zramCurrent.streams;
+    if (streamsMaxEl) streamsMaxEl.textContent = cpus;
+}
+
+async function checkZramSwap() {
+    try {
+        const swapInfo = await shell('swapon --show 2>/dev/null | grep zram || echo none');
+        const swapActive = swapInfo && !swapInfo.includes('none') && swapInfo.trim().length > 0;
+        const warningEl = document.getElementById('zram-swap-warning');
+        const disksizeInput = document.getElementById('zram-disksize-input');
+        const disksizeUnit = document.getElementById('zram-disksize-unit');
+        if (warningEl) warningEl.style.display = swapActive ? '' : 'none';
+        if (disksizeInput) disksizeInput.disabled = swapActive;
+        if (disksizeUnit) disksizeUnit.disabled = swapActive;
+        return swapActive;
+    } catch (_) {
+        return false;
+    }
+}
+
+function checkZramDirty() {
+    const algoSelect = document.getElementById('zram-algo-select');
+    const disksizeInput = document.getElementById('zram-disksize-input');
+    const streamsInput = document.getElementById('zram-streams-input');
+
+    const algoChanged = algoSelect && algoSelect.value !== zramCurrent.algo;
+    const disksizeMB = disksizeInput ? parseInt(disksizeInput.value, 10) : Math.floor(zramCurrent.disksize / 1048576);
+    const disksizeUnit = document.getElementById('zram-disksize-unit');
+    const unitMul = disksizeUnit ? parseInt(disksizeUnit.value, 10) : 1048576;
+    const newDisksize = disksizeMB * unitMul;
+    const disksizeChanged = newDisksize !== zramCurrent.disksize;
+    const streamsChanged = streamsInput && parseInt(streamsInput.value, 10) !== zramCurrent.streams;
+
+    const applyBtn = document.getElementById('btn-zram-apply');
+    if (applyBtn) applyBtn.disabled = !(algoChanged || disksizeChanged || streamsChanged);
+
+    // Update status dots
+    updateStatusDot('algo-status', algoChanged);
+    updateStatusDot('disksize-status', disksizeChanged);
+    updateStatusDot('streams-status', streamsChanged);
+}
+
+function updateStatusDot(id, changed) {
+    const dot = document.getElementById(id);
+    if (!dot) return;
+    dot.className = 'zram-status-dot' + (changed ? ' zram-status-dot-changed' : '');
+}
+
+async function applyZramChanges() {
+    const applyBtn = document.getElementById('btn-zram-apply');
+    if (applyBtn) applyBtn.disabled = true;
+    try {
+        const algoSelect = document.getElementById('zram-algo-select');
+        const disksizeInput = document.getElementById('zram-disksize-input');
+        const disksizeUnit = document.getElementById('zram-disksize-unit');
+        const streamsInput = document.getElementById('zram-streams-input');
+
+        const newAlgo = algoSelect ? algoSelect.value : zramCurrent.algo;
+        const disksizeMB = disksizeInput ? parseInt(disksizeInput.value, 10) : 0;
+        const unitMul = disksizeUnit ? parseInt(disksizeUnit.value, 10) : 1048576;
+        const newDisksize = disksizeMB * unitMul;
+        const newStreams = streamsInput ? parseInt(streamsInput.value, 10) : zramCurrent.streams;
+
+        // 1. Reset zram (required before changing parameters)
+        toast('Applying ZRAM changes...', '');
+        await shell('swapoff /dev/block/zram0 2>/dev/null; echo 1 > /sys/block/zram0/reset');
+
+        // 2. Set algorithm
+        if (newAlgo !== zramCurrent.algo) {
+            await shell('echo ' + sanitize(newAlgo) + ' > /sys/block/zram0/comp_algorithm');
+        }
+
+        // 3. Set max compression streams
+        if (newStreams !== zramCurrent.streams) {
+            await shell('echo ' + parseInt(newStreams, 10) + ' > /sys/block/zram0/max_comp_streams');
+        }
+
+        // 4. Set disk size
+        if (newDisksize !== zramCurrent.disksize) {
+            await shell('echo ' + newDisksize + ' > /sys/block/zram0/disksize');
+        }
+
+        // 5. Re-enable swap if it was active
+        const swapWasActive = await checkZramSwap();
+        // checkZramSwap will return false after reset, we don't re-enable swap automatically
+
+        // Update state
+        zramCurrent.algo = newAlgo;
+        zramCurrent.disksize = newDisksize;
+        zramCurrent.streams = newStreams;
+
+        // Persist config
+        await saveZramConfig({
+            algo: newAlgo,
+            disksize: newDisksize,
+            streams: newStreams,
+        });
+
+        // Refresh displays
+        const disksizeMBDisplay = Math.floor(newDisksize / 1048576);
+        const algoCurrentEl = document.getElementById('algo-current');
+        const disksizeCurrentEl = document.getElementById('disksize-current');
+        const streamsCurrentEl = document.getElementById('streams-current');
+        if (algoCurrentEl) algoCurrentEl.textContent = newAlgo;
+        if (disksizeCurrentEl) disksizeCurrentEl.textContent = disksizeMBDisplay + ' MB';
+        if (streamsCurrentEl) streamsCurrentEl.textContent = newStreams;
+
+        // Update device info display too
+        if (dom.deviceAlgo) dom.deviceAlgo.textContent = newAlgo;
+        if (dom.deviceDisksize) dom.deviceDisksize.textContent = disksizeMBDisplay + ' MB';
+
+        // Clear dirty indicators
+        updateStatusDot('algo-status', false);
+        updateStatusDot('disksize-status', false);
+        updateStatusDot('streams-status', false);
+
+        toast('ZRAM settings applied successfully', 'success');
+    } catch (e) {
+        toast('Failed to apply ZRAM changes: ' + e.message, 'error');
+        console.error('[zram-bench] applyZramChanges:', e);
+    } finally {
+        if (applyBtn) applyBtn.disabled = false;
+    }
+}
+
+async function resetZramDefaults() {
+    try {
+        if (!zramDefaults.algo) {
+            toast('No defaults recorded', 'error');
+            return;
+        }
+        // Reset zram
+        await shell('swapoff /dev/block/zram0 2>/dev/null; echo 1 > /sys/block/zram0/reset');
+        // Apply defaults
+        await shell('echo ' + sanitize(zramDefaults.algo) + ' > /sys/block/zram0/comp_algorithm');
+        await shell('echo ' + parseInt(zramDefaults.streams, 10) + ' > /sys/block/zram0/max_comp_streams');
+        await shell('echo ' + zramDefaults.disksize + ' > /sys/block/zram0/disksize');
+
+        zramCurrent.algo = zramDefaults.algo;
+        zramCurrent.disksize = zramDefaults.disksize;
+        zramCurrent.streams = zramDefaults.streams;
+
+        // Reset form values
+        populateZramControls(
+            [zramDefaults.algo],
+            zramDefaults.streams,
+            Math.floor(zramDefaults.disksize / 1048576)
+        );
+
+        // Reload full settings to refresh available algos etc.
+        await loadZramSettings();
+
+        // Clear persisted config
+        await shell('rm -f ' + ZRAM_CONFIG_PATH);
+
+        toast('ZRAM reset to defaults', 'success');
+    } catch (e) {
+        toast('Failed to reset ZRAM: ' + e.message, 'error');
+        console.error('[zram-bench] resetZramDefaults:', e);
+    }
+}
+
+async function saveZramConfig(config) {
+    try {
+        const json = JSON.stringify(config, null, 2);
+        await shell('mkdir -p /data/adb/modules/zram_bench');
+        // Use printf with single-quoted content to avoid shell escape issues
+        const safe = json.replace(/'/g, "'\\''");
+        await shell("printf '%s\\n' '" + safe + "' > '" + ZRAM_CONFIG_PATH + "'");
+    } catch (e) {
+        console.error('[zram-bench] saveZramConfig:', e);
+    }
+}
+
+async function loadZramConfig() {
+    try {
+        const raw = await shell('cat ' + ZRAM_CONFIG_PATH + ' 2>/dev/null || echo {}');
+        const config = JSON.parse(raw.trim());
+        if (config.algo || config.disksize || config.streams) {
+            return config;
+        }
+    } catch (e) {
+        // Config doesn't exist or is invalid, use defaults
+    }
+    return null;
+}
 
 // ── Progress Tracking ──────────────────────────────────────────
 function showProgress() {
@@ -743,6 +1035,32 @@ async function init() {
                 advancedToggle.setAttribute('aria-expanded', expanded);
             });
         }
+
+        // ZRAM Settings collapsible toggle
+        const zramSettingsToggle = document.getElementById('zram-settings-toggle');
+        const zramSettingsContent = document.getElementById('zram-settings-content');
+        if (zramSettingsToggle && zramSettingsContent) {
+            zramSettingsToggle.addEventListener('click', () => {
+                const expanded = zramSettingsContent.classList.toggle('expanded');
+                zramSettingsToggle.setAttribute('aria-expanded', expanded);
+            });
+        }
+
+        // ZRAM Settings controls
+        const zramAlgoSelect = document.getElementById('zram-algo-select');
+        const zramDisksizeInput = document.getElementById('zram-disksize-input');
+        const zramDisksizeUnit = document.getElementById('zram-disksize-unit');
+        const zramStreamsInput = document.getElementById('zram-streams-input');
+        const btnZramApply = document.getElementById('btn-zram-apply');
+        const btnZramReset = document.getElementById('btn-zram-reset');
+        if (zramAlgoSelect) zramAlgoSelect.addEventListener('change', checkZramDirty);
+        if (zramDisksizeInput) zramDisksizeInput.addEventListener('input', checkZramDirty);
+        if (zramDisksizeUnit) zramDisksizeUnit.addEventListener('change', checkZramDirty);
+        if (zramStreamsInput) zramStreamsInput.addEventListener('input', checkZramDirty);
+        if (btnZramApply) btnZramApply.addEventListener('click', applyZramChanges);
+        if (btnZramReset) btnZramReset.addEventListener('click', () => {
+            if (confirm('Reset ZRAM to boot-time defaults?')) resetZramDefaults();
+        });
         
         loadHistory();
         
@@ -773,14 +1091,29 @@ async function init() {
         
         await Promise.all([resolveBin, loadDev]);
         
+        // Load ZRAM settings after device info
+        loadZramSettings().catch(e => {
+            console.error('[zram-bench] loadZramSettings FAILED:', e);
+        });
+        
         // Check bench binary after resolution
         try {
             const exists = await shell('test -x ' + BENCH_BIN + ' && echo 1 || echo 0');
             if (exists.trim() === '0') {
                 dom.version.textContent = 'bench not installed';
+                const installBtn = document.getElementById('btn-install-cli');
+                if (installBtn) {
+                    installBtn.style.display = '';
+                    installBtn.addEventListener('click', installCLI);
+                }
             }
         } catch (_) {
             dom.version.textContent = 'bench not installed';
+            const installBtn = document.getElementById('btn-install-cli');
+            if (installBtn) {
+                installBtn.style.display = '';
+                installBtn.addEventListener('click', installCLI);
+            }
         }
         
         if (debugEl) {

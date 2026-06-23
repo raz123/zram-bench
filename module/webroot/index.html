@@ -13,6 +13,7 @@
             <div class="header-row">
                 <h1>ZRAM Benchmark</h1>
                 <span class="version" id="version"></span>
+                <button id="btn-install-cli" class="btn-install-cli" style="display:none;">Install CLI</button>
             </div>
             <div class="device-info" id="device-info">
                 <div class="info-grid">
@@ -97,6 +98,68 @@
                                 </select>
                             </div>
                         </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="collapsible" id="zram-settings-section" style="margin-bottom:16px;">
+                <button class="collapsible-toggle" id="zram-settings-toggle" aria-expanded="false" aria-controls="zram-settings-content">
+                    <span>ZRAM Settings</span>
+                    <span class="chevron">&#9662;</span>
+                </button>
+                <div class="collapsible-content" id="zram-settings-content">
+                    <div>
+                        <div class="zram-warning" id="zram-swap-warning" style="display:none;">
+                            Swap is active on zram0. Disk size changes are blocked.
+                        </div>
+
+                        <div class="zram-setting-card">
+                            <div class="zram-setting-header">
+                                <span class="zram-setting-label">Compression Algorithm</span>
+                                <span class="zram-status-dot" id="algo-status"></span>
+                            </div>
+                            <select id="zram-algo-select" class="select-input"></select>
+                            <div class="zram-setting-meta">
+                                <span>Current: <span id="algo-current">--</span></span>
+                                <span>Default: <span id="algo-default">--</span></span>
+                            </div>
+                        </div>
+
+                        <div class="zram-setting-card zram-danger">
+                            <div class="zram-setting-header">
+                                <span class="zram-setting-label">Disk Size</span>
+                                <span class="zram-status-dot" id="disksize-status"></span>
+                            </div>
+                            <div class="zram-setting-row">
+                                <input type="number" id="zram-disksize-input" class="number-input" min="4" step="1">
+                                <select id="zram-disksize-unit" class="select-small">
+                                    <option value="1048576">MB</option>
+                                    <option value="1073741824">GB</option>
+                                </select>
+                            </div>
+                            <div class="zram-setting-meta">
+                                <span>Current: <span id="disksize-current">--</span></span>
+                                <span>Max: <span id="disksize-max">--</span> (50% RAM)</span>
+                            </div>
+                            <div class="zram-danger-text">Changes disk size. Requires zram reset.</div>
+                        </div>
+
+                        <div class="zram-setting-card">
+                            <div class="zram-setting-header">
+                                <span class="zram-setting-label">Max Compression Streams</span>
+                                <span class="zram-status-dot" id="streams-status"></span>
+                            </div>
+                            <input type="number" id="zram-streams-input" class="number-input" min="1" step="1">
+                            <div class="zram-setting-meta">
+                                <span>Current: <span id="streams-current">--</span></span>
+                                <span>CPU cores: <span id="streams-max">--</span></span>
+                            </div>
+                        </div>
+
+                        <div class="zram-setting-actions">
+                            <button id="btn-zram-apply" class="btn btn-primary" disabled>Apply Changes</button>
+                            <button id="btn-zram-reset" class="btn btn-secondary">Reset to Defaults</button>
                         </div>
                     </div>
                 </div>
