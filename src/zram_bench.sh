@@ -734,6 +734,7 @@ run_benchmark() {
 
     # Create results directory
     RESULTS_DIR="${TEST_DIR}/.results"
+    rm -f "${RESULTS_DIR}"/*.json 2>/dev/null
     mkdir -p "$RESULTS_DIR" || die "Cannot create results directory"
 
     local total=0
