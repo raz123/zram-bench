@@ -169,7 +169,8 @@ restore_zram_settings() {
 
 cleanup() {
     restore_zram_settings
-    rm -rf "$TEST_DIR" 2>/dev/null
+    # Remove test files but preserve results directory
+    rm -f "${TEST_DIR}"/testfile_* "${TEST_DIR}"/warmup_* "${TEST_DIR}"/readback 2>/dev/null
 }
 
 # ─── Prerequisites ───────────────────────────────────────────────
@@ -850,7 +851,9 @@ main() {
     trap cleanup EXIT
 
     if [ -n "$RESULTS_FILE" ]; then
-        run_benchmark > "$RESULTS_FILE"
+        local tmp_file="${RESULTS_FILE}.tmp.$$"
+        run_benchmark > "$tmp_file"
+        mv "$tmp_file" "$RESULTS_FILE"
         log "Results written to: $RESULTS_FILE"
     else
         run_benchmark
