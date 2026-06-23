@@ -143,6 +143,14 @@ h1 {
     opacity: 0.4;
     cursor: not-allowed;
 }
+    
+.bench-disabled-msg {
+    text-align: center;
+    color: var(--warning, #ffa726);
+    font-size: 0.85rem;
+    padding: 8px 0;
+    opacity: 0.9;
+}
 
 .btn-icon {
     width: 18px;
