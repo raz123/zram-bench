@@ -1173,6 +1173,45 @@ async function init() {
             }
         }
         
+        // Keyboard shortcuts for testing and accessibility
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+1: Toggle Advanced Options
+            if (e.ctrlKey && e.key === '1') {
+                e.preventDefault();
+                document.getElementById('advanced-toggle')?.click();
+            }
+            // Ctrl+2: Toggle ZRAM Settings
+            if (e.ctrlKey && e.key === '2') {
+                e.preventDefault();
+                document.getElementById('zram-settings-toggle')?.click();
+            }
+            // Ctrl+Q: Quick Test
+            if (e.ctrlKey && e.key === 'q') {
+                e.preventDefault();
+                if (!dom.btnQuick?.disabled) dom.btnQuick?.click();
+            }
+            // Ctrl+B: Full Benchmark
+            if (e.ctrlKey && e.key === 'b') {
+                e.preventDefault();
+                if (!dom.btnFull?.disabled) dom.btnFull?.click();
+            }
+            // Ctrl+A: Apply ZRAM Changes
+            if (e.ctrlKey && e.key === 'a' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('btn-zram-apply')?.click();
+            }
+            // Ctrl+Shift+R: Reset ZRAM Defaults
+            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+                e.preventDefault();
+                document.getElementById('btn-zram-reset')?.click();
+            }
+            // Ctrl+I: Install CLI
+            if (e.ctrlKey && e.key === 'i') {
+                e.preventDefault();
+                document.getElementById('btn-install-cli')?.click();
+            }
+        });
+        
         if (debugEl) {
             debugEl.textContent += '\ninit() complete. BENCH_BIN=' + BENCH_BIN;
         }
