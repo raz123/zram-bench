@@ -461,11 +461,18 @@ async function applyZramChanges() {
         if (dom.deviceAlgo) dom.deviceAlgo.textContent = newAlgo;
         if (dom.deviceDisksize) dom.deviceDisksize.textContent = disksizeMBDisplay + ' MB';
         
-        // Re-enable benchmark buttons since zram is now configured
-        if (dom.btnQuick) dom.btnQuick.disabled = false;
-        if (dom.btnFull) dom.btnFull.disabled = false;
+        // Re-enable benchmark buttons only if zram has valid disksize
+        const zramReady = newDisksize > 0;
+        if (dom.btnQuick) {
+            dom.btnQuick.disabled = !zramReady;
+            dom.btnQuick.title = '';
+        }
+        if (dom.btnFull) {
+            dom.btnFull.disabled = !zramReady;
+            dom.btnFull.title = '';
+        }
         const disabledMsg = document.getElementById('bench-disabled-msg');
-        if (disabledMsg) disabledMsg.style.display = 'none';
+        if (disabledMsg) disabledMsg.style.display = zramReady ? 'none' : '';
 
         // Clear dirty indicators
         updateStatusDot('algo-status', false);
@@ -514,13 +521,18 @@ async function resetZramDefaults() {
         // Clear persisted config
         await shell('rm -f ' + ZRAM_CONFIG_PATH);
         
-        // Re-enable benchmark buttons if zram is now configured
-        if (zramDefaults.disksize > 0) {
-            if (dom.btnQuick) dom.btnQuick.disabled = false;
-            if (dom.btnFull) dom.btnFull.disabled = false;
-            const disabledMsg = document.getElementById('bench-disabled-msg');
-            if (disabledMsg) disabledMsg.style.display = 'none';
+        // Re-enable or disable benchmark buttons based on defaults
+        const zramReady = zramDefaults.disksize > 0;
+        if (dom.btnQuick) {
+            dom.btnQuick.disabled = !zramReady;
+            dom.btnQuick.title = zramReady ? '' : 'Configure ZRAM Settings first (set disk size)';
         }
+        if (dom.btnFull) {
+            dom.btnFull.disabled = !zramReady;
+            dom.btnFull.title = zramReady ? '' : 'Configure ZRAM Settings first (set disk size)';
+        }
+        const disabledMsg = document.getElementById('bench-disabled-msg');
+        if (disabledMsg) disabledMsg.style.display = zramReady ? 'none' : '';
 
         toast('ZRAM reset to defaults', 'success');
     } catch (e) {
