@@ -218,6 +218,15 @@ async function loadDeviceInfo() {
         
         // Update algorithm checkboxes based on device capabilities
         updateAlgoCheckboxes(availableAlgos, currentAlgo);
+        
+        // Disable benchmark buttons if zram is unconfigured
+        const zramReady = disksize && disksize !== '0' && disksize !== '--';
+        if (dom.btnQuick) dom.btnQuick.disabled = !zramReady;
+        if (dom.btnFull) dom.btnFull.disabled = !zramReady;
+        if (!zramReady && dom.btnQuick) {
+            dom.btnQuick.title = 'Configure ZRAM Settings first (set disk size)';
+            dom.btnFull.title = 'Configure ZRAM Settings first (set disk size)';
+        }
 
     } catch (e) {
         console.error('loadDeviceInfo:', e);
