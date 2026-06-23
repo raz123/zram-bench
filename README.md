@@ -1,8 +1,8 @@
 # zram-bench
 
-**ZRAM Benchmark Suite for Android** — Measure compression algorithm throughput, latency, and compression ratios on Android devices with ZRAM swap.
+**ZRAM Benchmark Suite for Android** — Measure compression algorithm throughput, latency, and compression ratios on Android devices with ZRAM swap. Includes a **KernelSU module with WebUI dashboard** for on-device benchmarking.
 
-Based on [HandyMenny's zramtest3.sh](https://gist.github.com/HandyMenny/d28766a45de48d6962a9), enhanced with multi-algorithm comparison, multi-stream testing, latency measurement, and automated reporting.
+Based on [HandyMenny's zramtest3.sh](https://gist.github.com/HandyMenny/d28766a45de48d6962a9), enhanced with multi-algorithm comparison, multi-stream testing, latency measurement, automated reporting, and a graphical WebUI.
 
 ## Why lz4 and zstd?
 
@@ -27,6 +27,7 @@ Modern Android kernels support several ZRAM compression algorithms. For realisti
 
 ## Features
 
+### Core Benchmark
 - **Multi-algorithm comparison** — Benchmark lz4 and zstd side-by-side (with optional lzo/lzo-rle for legacy devices)
 - **Multiple test patterns** — Zeros, random, compressible, text, structured, and mixed workloads
 - **Multi-stream testing** — Test with 1, 2, 4, or more compression streams
@@ -39,10 +40,21 @@ Modern Android kernels support several ZRAM compression algorithms. For realisti
 - **Zero dependencies on device** — Pure POSIX shell, no bc/jq/bashisms; works with Android's toybox
 - **PC-side orchestrator** — Push, run, pull, and compare from your development machine via ADB
 
+### KernelSU Module with WebUI
+- **Graphical dashboard** — Run benchmarks from a beautiful dark-theme WebUI
+- **Device info card** — Shows model, kernel, current algorithm, and ZRAM size
+- **Algorithm selection** — Checkbox-based selection of available compression algorithms
+- **ZRAM configuration** — Configure compression algorithm, disk size, and max streams from the WebUI
+- **Install CLI button** — One-click installation of the `zram-bench` command
+- **Progress tracking** — Real-time progress bar during benchmark execution
+- **Results table** — Interactive results display with throughput, compression ratio, and latency
+- **History** — Save and compare benchmark runs over time
+- **Keyboard shortcuts** — Quick access to all functions (see below)
+
 ## Requirements
 
 ### Device (Android)
-- Root access (`adb root`)
+- Root access via KernelSU (ReZukiSU v4.1.0+ tested) or Magisk
 - Kernel with ZRAM support (`/sys/block/zram0`)
 - Standard Android shell (toybox/busybox)
 
@@ -53,16 +65,46 @@ Modern Android kernels support several ZRAM compression algorithms. For realisti
 
 ## Quick Start
 
+### Option 1: KernelSU Module (Recommended)
+
+1. Download `zram_bench_module.zip` from [Releases](https://github.com/raz123/zram-bench/releases)
+2. Open ReZukiSU/Magisk Manager → Modules → Install from storage
+3. Select the zip file
+4. Open the WebUI from the module card
+
+### Option 2: CLI
+
 ```bash
-# 1. Connect your rooted Android device
+# Connect your rooted Android device
 adb devices
 
-# 2. Run the orchestrator (pushes script, runs benchmark, pulls results)
+# Push and run the benchmark
+adb push src/zram_bench.sh /data/local/tmp/
+adb shell chmod +x /data/local/tmp/zram_bench.sh
+adb shell su -c "/data/local/tmp/zram_bench.sh"
+```
+
+### Option 3: PC-side Orchestrator
+
+```bash
+# Run the orchestrator (pushes script, runs benchmark, pulls results)
 ./src/run_bench.sh run
 
-# 3. Generate a summary report
+# Generate a summary report
 python3 src/zram_bench_reporter.py --summary results/20240101_120000.json
 ```
+
+## Keyboard Shortcuts (WebUI)
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+1` | Toggle Advanced Options |
+| `Ctrl+2` | Toggle ZRAM Settings |
+| `Ctrl+Q` | Quick Test |
+| `Ctrl+B` | Full Benchmark |
+| `Ctrl+A` | Apply ZRAM Changes |
+| `Ctrl+Shift+R` | Reset ZRAM Defaults |
+| `Ctrl+I` | Install CLI |
 
 ## Usage
 
@@ -147,6 +189,27 @@ python3 src/zram_bench_reporter.py --compare old.json new.json --threshold 10
 
 # Output to file
 python3 src/zram_bench_reporter.py --summary results.json -o report.md
+```
+
+## KernelSU Module Structure
+
+```
+module/
+├── module.prop          # Module metadata
+├── customize.sh         # Installer script
+├── service.sh           # Boot-time ZRAM config application
+├── post-fs-data.sh      # Early boot script
+├── uninstall.sh         # Cleanup on uninstall
+├── skip_mount           # Prevents system mount overlay
+├── zram_bench.sh        # Main benchmark script
+├── zram_bench_reporter.py  # Python reporter
+├── system/
+│   └── bin/
+│       └── zram-bench   # CLI wrapper
+└── webroot/
+    ├── index.html       # WebUI entry point
+    ├── script.js        # WebUI logic (keyboard shortcuts, benchmark execution)
+    └── style.css        # WebUI styling
 ```
 
 ## Output Format
@@ -246,6 +309,16 @@ zram-bench/
 │   ├── zram_bench.sh      # Main on-device benchmark script
 │   ├── zram_bench_reporter.py  # Python reporter for summaries/comparisons
 │   └── run_bench.sh       # PC-side ADB orchestrator
+├── module/                # KernelSU module
+│   ├── module.prop        # Module metadata
+│   ├── customize.sh       # Installer
+│   ├── service.sh         # Boot-time ZRAM config
+│   ├── zram_bench.sh      # Benchmark script (in module)
+│   ├── system/bin/        # CLI wrapper
+│   └── webroot/           # WebUI files
+│       ├── index.html
+│       ├── script.js
+│       └── style.css
 ├── docs/
 │   ├── ALGORITHM_NOTES.md # Compression algorithm details
 │   └── SM8250_NOTES.md    # Device-specific findings
